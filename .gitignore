@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+
+# Local databases / secrets
+*.db
+.env
+
+# Node / Next
+node_modules/
+.next/
+coverage/
+
+# OS/editor
+.DS_Store
+
+# TypeScript build cache
+*.tsbuildinfo
+
+# Python package metadata
+*.egg-info/

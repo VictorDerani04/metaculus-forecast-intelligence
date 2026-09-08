@@ -26,6 +26,7 @@ it('imports a question into the selected competition and shows source details', 
   expect(screen.getByText('Community prediction unavailable')).toBeInTheDocument();
   expect(screen.getByText('Some source details are unavailable.')).toBeInTheDocument();
   expect(screen.getByText('Official results.')).toBeInTheDocument();
+  expect(screen.getByRole('link', {name: 'Open Forecast Room'})).toHaveAttribute('href', '/questions/q1');
 });
 
 it('offers manual entry when live import is unavailable and saves the entered details', async () => {

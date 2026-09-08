@@ -51,6 +51,7 @@ export function ImportQuestion({competitionId, onImported}: {competitionId: stri
     {error && <p role="alert">{error}</p>}
     {question && <article>
       <h3>{question.title}</h3>
+      <a href={`/questions/${encodeURIComponent(question.id)}`}>Open Forecast Room</a>
       <a href={question.source_url}>View on Metaculus</a>
       {question.import_status === 'partial' && <p>Some source details are unavailable.</p>}
       {question.import_status === 'manual' && <p>Saved from manual entry.</p>}

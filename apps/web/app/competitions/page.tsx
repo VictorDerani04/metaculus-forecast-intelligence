@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { QuestionList } from '../../components/question-list';
 import { ImportQuestion } from '../../components/import-question';
 
 import {
@@ -38,6 +39,7 @@ export function CompetitionDashboard({
             {competition.questionCount}{" "}
             {competition.questionCount === 1 ? "question" : "questions"}
           </p>
+          <QuestionList competitionId={competition.id} />
           <ImportQuestion competitionId={competition.id} onImported={() => onImported?.(competition.id)} />
         </section>
       ))}

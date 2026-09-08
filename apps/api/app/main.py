@@ -8,6 +8,8 @@ from starlette.middleware.sessions import SessionMiddleware
 from app.auth.routes import router as auth_router
 from app.auth.seed import seed_private_user
 from app.competitions.routes import router as competitions_router
+from app.forecasts.routes import router as forecasts_router
+from app.forecasts.models import install_history_guards
 from app.db.base import Base
 from app.db.session import build_session_factory
 
@@ -21,6 +23,7 @@ def create_app(
     session_secret = session_secret or os.getenv("SESSION_SECRET", "dev-only-change-me")
     engine, session_factory = build_session_factory(database_url)
     Base.metadata.create_all(engine)
+    install_history_guards(engine)
 
     app = FastAPI(title="Metaculus Forecast Intelligence")
     app.state.engine = engine
@@ -41,6 +44,7 @@ def create_app(
     )
     app.include_router(auth_router)
     app.include_router(competitions_router)
+    app.include_router(forecasts_router)
 
     @app.get("/health")
     def health():

@@ -17,6 +17,7 @@ afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
 it('loads the question room and displays four distinct probability concepts', async () => {
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, options) => {
+    if (String(url).endsWith('/research')) return new Response(JSON.stringify({items: [], evidence: []}));
     expect(String(url)).toMatch(/\/questions\/q1\/room$/);
     expect(options?.credentials).toBe('include');
     return new Response(JSON.stringify(room), {status: 200});
@@ -34,6 +35,7 @@ it('loads the question room and displays four distinct probability concepts', as
 it('explicit saves append human history and preserve community probability', async () => {
   let sequence = 0;
   vi.spyOn(globalThis, 'fetch').mockImplementation(async (url, options) => {
+    if (String(url).endsWith('/research')) return new Response(JSON.stringify({items: [], evidence: []}));
     if (String(url).endsWith('/room')) return new Response(JSON.stringify(room));
     expect(String(url)).toMatch(/\/questions\/q1\/forecasts$/);
     expect(options?.method).toBe('POST');
@@ -65,7 +67,7 @@ it('explicit saves append human history and preserve community probability', asy
 
 it('failed saves retain the draft and saved human history', async () => {
   const saved = {id: 1, question_id: 'q1', user_id: 'u1', probability: 0.2, rationale: 'Saved reasoning', created_at: '2026-09-07T12:00:00Z'};
-  vi.spyOn(globalThis, 'fetch').mockImplementation(async url => String(url).endsWith('/room')
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async url => String(url).endsWith('/research') ? new Response(JSON.stringify({items: [], evidence: []})) : String(url).endsWith('/room')
     ? new Response(JSON.stringify({...room, human_forecast: saved, history: [saved]}))
     : new Response('{}', {status: 500}));
   render(await QuestionPage({params: Promise.resolve({id: 'q1'})}));
@@ -82,7 +84,7 @@ it('failed saves retain the draft and saved human history', async () => {
 
 it('prevents duplicate saves while a request is pending', async () => {
   let finish!: (response: Response) => void;
-  const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async url => String(url).endsWith('/room')
+  const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async url => String(url).endsWith('/research') ? new Response(JSON.stringify({items: [], evidence: []})) : String(url).endsWith('/room')
     ? new Response(JSON.stringify(room)) : new Promise<Response>(resolve => {finish = resolve;}));
   render(await QuestionPage({params: Promise.resolve({id: 'q1'})}));
   const input = await screen.findByLabelText('Human probability (%)');
@@ -92,7 +94,7 @@ it('prevents duplicate saves while a request is pending', async () => {
   expect(screen.getByRole('button', {name: 'Saving...'})).toBeDisabled();
   expect(input).toBeDisabled();
   fireEvent.submit(input.closest('form')!);
-  expect(fetchMock).toHaveBeenCalledTimes(2);
+  expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/forecasts'))).toHaveLength(1);
   await act(async () => finish(new Response(JSON.stringify({id: 1, question_id: 'q1', user_id: 'u1', probability: 0, rationale: null, created_at: '2026-09-07T12:00:00Z'}), {status: 201})));
   expect(within(screen.getByRole('group', {name: 'Human Final Forecast'})).getByText('0%')).toBeInTheDocument();
   expect(screen.getByRole('button', {name: 'Save human forecast'})).toBeEnabled();

@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { getForecastRoom, type ForecastRoomData } from '../lib/api';
 import { ForecastEditor } from './forecast-editor';
+import { ResearchInbox } from './research-inbox';
 import { ProbabilityStrip } from './probability-strip';
 export function ForecastRoom({questionId}: {questionId: string}) {
   const [room, setRoom] = useState<ForecastRoomData | null>(null);
@@ -34,5 +35,6 @@ export function ForecastRoom({questionId}: {questionId: string}) {
         </li>)}
       </ol>}
     </section>
+    <ResearchInbox key={questionId} questionId={questionId} />
   </main>;
 }

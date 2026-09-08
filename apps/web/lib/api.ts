@@ -123,3 +123,30 @@ export async function listQuestions(competitionId: string): Promise<QuestionSumm
   if (!response.ok) throw new Error('Failed to load questions');
   return response.json() as Promise<QuestionSummary[]>;
 }
+
+export type ResearchStatus = 'candidate' | 'approved' | 'rejected' | 'deferred' | 'duplicate' | 'superseded';
+export type ResearchDecision = {id: number; user_id: string; decision: ResearchStatus; created_at: string; related_item_id: string | null};
+export type CandidateInput = {question_id: string; title: string; summary: string; source_url: string; source_name: string};
+export type ResearchItem = CandidateInput & {id: string; user_id: string; status: ResearchStatus; created_at: string; decisions: ResearchDecision[]};
+export type Evidence = CandidateInput & {id: string; user_id: string; research_item_id: string; decision: 'approved'; approved_at: string; dependency_evidence_ids: string[]};
+export type ResearchData = {items: ResearchItem[]; evidence: Evidence[]};
+export async function getResearch(questionId: string): Promise<ResearchData> {
+  const response = await fetch(`${API_BASE_URL}/questions/${encodeURIComponent(questionId)}/research`, {credentials: 'include'});
+  if (!response.ok) throw new Error('Failed to load research');
+  return response.json() as Promise<ResearchData>;
+}
+export async function addResearchCandidate(payload: CandidateInput): Promise<ResearchItem> {
+  const response = await fetch(`${API_BASE_URL}/research-items`, {
+    method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error('Failed to add candidate');
+  return response.json() as Promise<ResearchItem>;
+}
+export type ResearchDecisionInput = {decision: Exclude<ResearchStatus, 'candidate'>; related_item_id?: string; dependency_evidence_ids?: string[]};
+export async function decideResearch(itemId: string, payload: ResearchDecisionInput): Promise<ResearchItem> {
+  const response = await fetch(`${API_BASE_URL}/research-items/${encodeURIComponent(itemId)}/decision`, {
+    method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error('Failed to record research decision');
+  return response.json() as Promise<ResearchItem>;
+}

@@ -7,6 +7,10 @@ from sqlalchemy import func, select
 from app.auth.models import User
 from app.auth.routes import get_current_user
 from app.competitions.models import Competition, Question
+from app.competitions.schemas import QuestionImport, ImportedQuestionResponse
+from app.competitions.service import import_question, QuestionProvider
+from app.integrations.metaculus.dependencies import get_metaculus_client
+from app.integrations.metaculus.client import MetaculusUnavailable
 
 
 router = APIRouter(prefix="/competitions", tags=["competitions"])
@@ -163,3 +167,33 @@ def list_questions(
             )
             for question in questions
         ]
+
+
+@router.post(
+    '/{competition_id}/questions/import',
+    response_model=ImportedQuestionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def import_competition_question(
+    competition_id: str,
+    payload: QuestionImport,
+    request: Request,
+    user: Annotated[User, Depends(get_current_user)],
+    provider: Annotated[QuestionProvider, Depends(get_metaculus_client)],
+):
+    with request.app.state.session_factory() as session:
+        get_owned_competition(session, competition_id, user.id)
+        try:
+            return import_question(
+                session, competition_id=competition_id, user_id=user.id,
+                url=payload.url, provider=provider, manual_details=payload.manual_details,
+            )
+        except ValueError:
+            raise HTTPException(status_code=422, detail={
+                'code': 'invalid_url', 'message': 'Enter a valid Metaculus question URL.',
+            }) from None
+        except MetaculusUnavailable:
+            raise HTTPException(status_code=409, detail={
+                'code': 'manual_entry_required',
+                'message': 'Live import unavailable. Enter question details manually.',
+            }) from None

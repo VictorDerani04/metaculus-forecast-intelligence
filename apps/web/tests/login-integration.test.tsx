@@ -47,6 +47,6 @@ describe("login integration", () => {
       });
     });
 
-    expect(replaceMock).toHaveBeenCalledWith("/");
+    expect(replaceMock).toHaveBeenCalledWith("/competitions");
   });
 });

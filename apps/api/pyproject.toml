@@ -9,10 +9,11 @@ dependencies = [
   "psycopg[binary]>=3.2,<4",
   "pydantic[email]>=2.11,<3",
   "itsdangerous>=2.2,<3",
+  "httpx>=0.28,<1",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8,<10", "httpx>=0.28,<1"]
+dev = ["pytest>=8,<10"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

@@ -59,7 +59,7 @@ export default function LoginPage() {
 
   async function handleLogin(credentials: LoginCredentials) {
     await login(credentials);
-    router.replace("/");
+    router.replace("/competitions");
   }
 
   return <LoginForm onLogin={handleLogin} />;

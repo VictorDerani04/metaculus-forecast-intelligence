@@ -2,6 +2,7 @@ import os
 
 from app.competitions import models as competition_models
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.auth.routes import router as auth_router
@@ -30,6 +31,13 @@ def create_app(
         session_cookie="session",
         same_site="lax",
         https_only=os.getenv("COOKIE_SECURE", "false").lower() == "true",
+    )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[os.getenv('WEB_ORIGIN', 'http://localhost:3000')],
+        allow_credentials=True,
+        allow_methods=['GET', 'POST'],
+        allow_headers=['Content-Type'],
     )
     app.include_router(auth_router)
     app.include_router(competitions_router)

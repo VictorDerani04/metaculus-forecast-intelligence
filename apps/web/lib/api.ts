@@ -150,3 +150,37 @@ export async function decideResearch(itemId: string, payload: ResearchDecisionIn
   if (!response.ok) throw new Error('Failed to record research decision');
   return response.json() as Promise<ResearchItem>;
 }
+
+export type CopilotMessage = {
+  id: number;
+  role: 'user' | 'assistant';
+  content: string;
+  created_at: string;
+};
+export type CopilotActionProposal = {
+  action: string;
+  summary: string;
+};
+export type CopilotHistory = {messages: CopilotMessage[]};
+export type CopilotExchange = {
+  user_message: CopilotMessage;
+  assistant_message: CopilotMessage;
+  proposed_actions: CopilotActionProposal[];
+};
+export async function getCopilotHistory(questionId: string): Promise<CopilotHistory> {
+  const response = await fetch(`${API_BASE_URL}/questions/${encodeURIComponent(questionId)}/chat`, {
+    credentials: 'include',
+  });
+  if (!response.ok) throw new Error('Failed to load copilot history');
+  return response.json() as Promise<CopilotHistory>;
+}
+export async function sendCopilotMessage(questionId: string, content: string): Promise<CopilotExchange> {
+  const response = await fetch(`${API_BASE_URL}/questions/${encodeURIComponent(questionId)}/chat`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({content}),
+  });
+  if (!response.ok) throw new Error('Failed to send copilot message');
+  return response.json() as Promise<CopilotExchange>;
+}

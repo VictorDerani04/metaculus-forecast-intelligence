@@ -4,6 +4,7 @@ import { getForecastRoom, type ForecastRoomData } from '../lib/api';
 import { ForecastEditor } from './forecast-editor';
 import { ResearchInbox } from './research-inbox';
 import { ProbabilityStrip } from './probability-strip';
+import { CopilotChat } from './copilot-chat';
 export function ForecastRoom({questionId}: {questionId: string}) {
   const [room, setRoom] = useState<ForecastRoomData | null>(null);
   const [error, setError] = useState('');
@@ -36,5 +37,6 @@ export function ForecastRoom({questionId}: {questionId: string}) {
       </ol>}
     </section>
     <ResearchInbox key={questionId} questionId={questionId} />
+    <CopilotChat key={`copilot-${questionId}`} questionId={questionId} />
   </main>;
 }

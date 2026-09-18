@@ -5,6 +5,7 @@ import { ForecastEditor } from './forecast-editor';
 import { ResearchInbox } from './research-inbox';
 import { ProbabilityStrip } from './probability-strip';
 import { CopilotChat } from './copilot-chat';
+import { ModelWorkspace } from './model-workspace';
 export function ForecastRoom({questionId}: {questionId: string}) {
   const [room, setRoom] = useState<ForecastRoomData | null>(null);
   const [error, setError] = useState('');
@@ -25,6 +26,8 @@ export function ForecastRoom({questionId}: {questionId: string}) {
     <p>Closes: {room.question.close_at ?? 'unavailable'}</p>
     <p>Resolves: {room.question.resolve_at ?? 'unavailable'}</p>
     <ProbabilityStrip room={room} />
+    <ModelWorkspace key={`models-${questionId}`} questionId={questionId} onRun={probability =>
+      setRoom(current => current && ({...current, model_probability: probability}))} />
     <ForecastEditor questionId={questionId} current={room.human_forecast} onSaved={record =>
       setRoom(current => current && ({...current, human_forecast: record, history: [...current.history, record]}))} />
     <section aria-label="Human forecast history"><h2>Human forecast history</h2>

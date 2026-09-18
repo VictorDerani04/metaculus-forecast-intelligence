@@ -184,3 +184,25 @@ export async function sendCopilotMessage(questionId: string, content: string): P
   if (!response.ok) throw new Error('Failed to send copilot message');
   return response.json() as Promise<CopilotExchange>;
 }
+
+export type ModelFamily = 'base_rate' | 'bayesian_likelihood_ratio' | 'weighted_driver' | 'scenario_tree' | 'seeded_monte_carlo';
+export type ModelSpec = {
+  id: string; user_id: string; question_id: string; family: ModelFamily; rationale: string;
+  parameters: Record<string, unknown>; assumptions: string[]; evidence_ids: string[]; source_model_id: string | null;
+  status: 'draft' | 'approved'; version: number; approved_at: string | null; created_at: string;
+};
+export type ModelRun = {
+  id: string; model_spec_id: string; question_id: string; user_id: string; status: 'succeeded' | 'failed';
+  probability: number | null; inputs: Record<string, unknown>; evidence_ids: string[]; model_version: number;
+  spec_snapshot: Record<string, unknown>; created_at: string;
+};
+export type ModelSpecInput = Pick<ModelSpec, 'family' | 'rationale' | 'parameters' | 'assumptions' | 'evidence_ids'>;
+async function modelRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {credentials: 'include', ...init, headers: {'Content-Type': 'application/json', ...init?.headers}});
+  if (!response.ok) throw new Error('Model request failed');
+  return response.json() as Promise<T>;
+}
+export function listModels(questionId: string): Promise<ModelSpec[]> { return modelRequest(`/questions/${encodeURIComponent(questionId)}/models`); }
+export function createModel(questionId: string, payload: ModelSpecInput): Promise<ModelSpec> { return modelRequest(`/questions/${encodeURIComponent(questionId)}/models`, {method: 'POST', body: JSON.stringify(payload)}); }
+export function approveModel(modelId: string): Promise<ModelSpec> { return modelRequest(`/models/${encodeURIComponent(modelId)}/activate`, {method: 'POST'}); }
+export function runModel(modelId: string): Promise<ModelRun> { return modelRequest(`/models/${encodeURIComponent(modelId)}/run`, {method: 'POST'}); }

@@ -49,8 +49,17 @@ def get_forecast_room(session: Session, question_id: str, user_id: str) -> Forec
                 'source_url', 'resolution_criteria', 'question_type', 'close_at', 'resolve_at',
             )
         })
+    from app.models_lab.models import ModelRun
+    latest_model_run = session.scalar(
+        select(ModelRun).where(
+            ModelRun.question_id == question_id,
+            ModelRun.user_id == user_id,
+            ModelRun.status == 'succeeded',
+        ).order_by(ModelRun.created_at.desc(), ModelRun.id.desc())
+    )
     return ForecastRoomResponse(
         question=room_question,
+        model_probability=latest_model_run.probability if latest_model_run else None,
         community_probability=source.crowd_probability if source else None,
         history=history,
         human_forecast=history[-1] if history else None,

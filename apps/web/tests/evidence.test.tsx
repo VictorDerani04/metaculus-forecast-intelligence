@@ -15,6 +15,7 @@ it('shows a retryable error when initial research loading fails', async () => {
   let researchAttempts = 0;
   vi.spyOn(globalThis, 'fetch').mockImplementation(async url => {
     if (String(url).endsWith('/room')) return new Response(JSON.stringify(room));
+    if (String(url).endsWith('/models')) return new Response(JSON.stringify([]));
     researchAttempts += 1;
     return researchAttempts === 1
       ? new Response('{}', {status: 500})

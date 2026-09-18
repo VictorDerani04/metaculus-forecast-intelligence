@@ -206,3 +206,28 @@ export function listModels(questionId: string): Promise<ModelSpec[]> { return mo
 export function createModel(questionId: string, payload: ModelSpecInput): Promise<ModelSpec> { return modelRequest(`/questions/${encodeURIComponent(questionId)}/models`, {method: 'POST', body: JSON.stringify(payload)}); }
 export function approveModel(modelId: string): Promise<ModelSpec> { return modelRequest(`/models/${encodeURIComponent(modelId)}/activate`, {method: 'POST'}); }
 export function runModel(modelId: string): Promise<ModelRun> { return modelRequest(`/models/${encodeURIComponent(modelId)}/run`, {method: 'POST'}); }
+export type ChartMetadata = {model_version: number | null; generated_at: string; why_this_chart: string};
+export type AnalysisData = {
+  probability_history: ChartMetadata & {
+    human: {timestamp: string; probability: number}[];
+    model: {timestamp: string; probability: number}[];
+    crowd: {timestamp: string; probability: number}[];
+  };
+  distribution: ChartMetadata & {
+    available: boolean; probability: number | null; values: number[]; unavailable_reason: string | null;
+  };
+  sensitivity: ChartMetadata & {
+    impacts: {name: string; baseline: number; downside: number; upside: number; impact: number}[];
+  };
+  evidence_impact: ChartMetadata & {
+    evidence: {evidence_id: string; title: string; summary: string; dependency_warning: boolean}[];
+  };
+  scenarios: ChartMetadata & {scenarios: {name: string; weight: number; probability: number}[]};
+  model_map: ChartMetadata & {
+    nodes: {id: string; kind: string; label: string}[];
+    edges: {source: string; target: string; relationship: string}[];
+  };
+};
+export function getAnalysis(questionId: string, modelId: string): Promise<AnalysisData> {
+  return modelRequest(`/questions/${encodeURIComponent(questionId)}/analysis/${encodeURIComponent(modelId)}`);
+}

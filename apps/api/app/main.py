@@ -16,6 +16,7 @@ from app.copilot.provider import UnavailableCopilotProvider
 from app.copilot.routes import router as copilot_router
 from app.models_lab.routes import router as models_router
 from app.models_lab.models import install_model_guards
+from app.analytics.routes import router as analytics_router
 from app.db.base import Base
 from app.db.session import build_session_factory
 
@@ -57,6 +58,7 @@ def create_app(
     app.include_router(research_router)
     app.include_router(copilot_router)
     app.include_router(models_router)
+    app.include_router(analytics_router)
 
     @app.get("/health")
     def health():

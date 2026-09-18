@@ -27,7 +27,13 @@ def create_model(session: Session, question_id: str, user_id: str, payload: Mode
     get_owned_question(session, question_id, user_id)
     validate_evidence_dependencies(session, payload.evidence_ids, question_id, user_id)
     spec = ModelSpec(question_id=question_id, user_id=user_id, **payload.model_dump())
-    session.add(spec); session.commit()
+    session.add(spec)
+    session.flush()
+    from app.audit.service import record_audit
+    record_audit(session, user_id=user_id, question_id=question_id, action='model_created',
+                 entity_type='model_spec', entity_id=spec.id,
+                 metadata={'family': spec.family, 'version': spec.version})
+    session.commit()
     return ModelSpecResponse.model_validate(spec)
 
 
@@ -59,6 +65,10 @@ def approve_model(session: Session, model_id: str, user_id: str) -> ModelSpecRes
     if spec.status == 'draft':
         spec.status = 'approved'
         spec.approved_at = datetime.now(timezone.utc)
+        from app.audit.service import record_audit
+        record_audit(session, user_id=user_id, question_id=spec.question_id, action='model_approved',
+                     entity_type='model_spec', entity_id=spec.id,
+                     metadata={'version': spec.version})
         session.commit()
     return ModelSpecResponse.model_validate(spec)
 
@@ -81,17 +91,26 @@ def run_approved_model(session: Session, model_id: str, user_id: str) -> ModelRu
         validate_evidence_dependencies(session, spec.evidence_ids, spec.question_id, user_id)
         result = run_model({'family': spec.family, 'parameters': spec.parameters})
     except (HTTPException, ValueError) as exc:
-        session.add(ModelRun(
+        failed_run = ModelRun(
             model_spec_id=spec.id, user_id=user_id, question_id=spec.question_id,
             status='failed', probability=None, inputs=deepcopy(spec.parameters), evidence_ids=deepcopy(spec.evidence_ids),
-            model_version=spec.version, spec_snapshot=spec_snapshot(spec),
-        ))
+            model_version=spec.version, spec_snapshot=spec_snapshot(spec))
+        session.add(failed_run)
+        session.flush()
+        from app.audit.service import record_audit
+        record_audit(session, user_id=user_id, question_id=spec.question_id, action='model_run_failed',
+                     entity_type='model_run', entity_id=failed_run.id, metadata={'model_spec_id': spec.id})
         session.commit()
         raise HTTPException(status_code=422, detail='Model run failed') from None
     run = ModelRun(model_spec_id=spec.id, user_id=user_id, question_id=spec.question_id,
                    probability=result.probability, inputs=deepcopy(spec.parameters), evidence_ids=deepcopy(spec.evidence_ids),
                    model_version=spec.version, spec_snapshot=spec_snapshot(spec))
-    session.add(run); session.commit()
+    session.add(run)
+    session.flush()
+    from app.audit.service import record_audit
+    record_audit(session, user_id=user_id, question_id=spec.question_id, action='model_run_succeeded',
+                 entity_type='model_run', entity_id=run.id, metadata={'model_spec_id': spec.id})
+    session.commit()
     return ModelRunResponse.model_validate(run)
 
 

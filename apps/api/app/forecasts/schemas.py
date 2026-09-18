@@ -45,3 +45,43 @@ class ForecastRoomResponse(BaseModel):
     human_forecast: HumanForecastResponse | None = None
     community_probability: float | None = None
     history: list[HumanForecastResponse] = Field(default_factory=list)
+
+
+class DecisionCreate(BaseModel):
+    rationale: str = Field(min_length=1, max_length=10000)
+
+
+class DecisionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    user_id: str
+    question_id: str
+    competition_id: str
+    human_probability: float | None
+    rationale: str
+    prior_probability: float | None
+    model_probability: float | None
+    crowd_probability: float | None
+    evidence_ids: list[str]
+    model_spec_id: str | None
+    model_run_id: str | None
+    created_at: datetime
+
+    @classmethod
+    def from_snapshot(cls, *, user_id, question, human, source, model, evidence_ids, rationale):
+        return cls(
+            id=__import__('uuid').uuid4().hex,
+            user_id=user_id,
+            question_id=question.id,
+            competition_id=question.competition_id,
+            human_probability=human.probability if human else None,
+            rationale=rationale,
+            prior_probability=None,
+            model_probability=model.probability if model else None,
+            crowd_probability=source.crowd_probability if source else None,
+            evidence_ids=evidence_ids,
+            model_spec_id=model.model_spec_id if model else None,
+            model_run_id=model.id if model else None,
+            created_at=datetime.now(timezone.utc),
+        )

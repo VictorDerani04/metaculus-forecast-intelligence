@@ -26,6 +26,13 @@ def create_human_forecast(
     forecast = HumanForecast(question_id=question_id, user_id=user_id, **payload.model_dump())
     session.add(forecast)
     session.flush()
+    from app.audit.service import record_audit
+    record_audit(
+        session, user_id=user_id, question_id=question_id,
+        action='human_forecast_recorded', entity_type='human_forecast',
+        entity_id=str(forecast.id),
+        metadata={'probability': payload.probability, 'rationale': payload.rationale},
+    )
     result = HumanForecastResponse.model_validate(forecast)
     session.commit()
     return result

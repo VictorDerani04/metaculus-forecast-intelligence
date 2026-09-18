@@ -51,3 +51,15 @@ def test_attention_calculation_is_read_only(owned_question):
     with app.state.session_factory() as session:
         assert session.scalar(select(func.count(HumanForecast.id))) == 0
         assert session.scalar(select(func.count(ModelRun.id))) == 0
+
+
+def test_attention_priority_normalizes_sqlite_naive_history_timestamps():
+    from app.analytics.priority import attention_priority
+
+    result = attention_priority({
+        'evaluated_at': datetime(2026, 9, 17, tzinfo=timezone.utc),
+        'last_human_update': datetime(2026, 9, 1),
+        'human_probability': 0.5,
+    })
+
+    assert result.score > 0

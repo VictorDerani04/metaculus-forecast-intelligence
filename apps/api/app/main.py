@@ -17,6 +17,8 @@ from app.copilot.routes import router as copilot_router
 from app.models_lab.routes import router as models_router
 from app.models_lab.models import install_model_guards
 from app.analytics.routes import router as analytics_router
+from app.audit.models import install_audit_guards, install_journal_guards
+from app.audit import models as audit_models
 from app.db.base import Base
 from app.db.session import build_session_factory
 
@@ -33,6 +35,8 @@ def create_app(
     install_history_guards(engine)
     install_evidence_guards(engine)
     install_model_guards(engine)
+    install_audit_guards(engine)
+    install_journal_guards(engine)
 
     app = FastAPI(title="Metaculus Forecast Intelligence")
     app.state.engine = engine

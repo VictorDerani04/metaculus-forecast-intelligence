@@ -53,17 +53,21 @@ def _normalized(value: object) -> float:
     return max(0.0, min(1.0, float(value)))
 
 
+def _utc(value: datetime) -> datetime:
+    return value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value
+
+
 def _days_since(value: datetime | None, evaluated_at: datetime) -> float | None:
     if value is None:
         return None
-    return max(0.0, (evaluated_at - value).total_seconds() / 86400)
+    return max(0.0, (_utc(evaluated_at) - _utc(value)).total_seconds() / 86400)
 
 
 def attention_priority(question_state: dict) -> AttentionPriority:
     evaluated_at = question_state.get('evaluated_at') or datetime.now(timezone.utc)
     resolve_at = question_state.get('resolve_at')
     days_until_resolution = (
-        max(0.0, (resolve_at - evaluated_at).total_seconds() / 86400)
+        max(0.0, (_utc(resolve_at) - _utc(evaluated_at)).total_seconds() / 86400)
         if resolve_at else None
     )
     deadline = 0.0 if days_until_resolution is None else _normalized(

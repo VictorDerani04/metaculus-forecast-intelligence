@@ -7,6 +7,7 @@ import { ProbabilityStrip } from './probability-strip';
 import { CopilotChat } from './copilot-chat';
 import { ModelWorkspace } from './model-workspace';
 import { AnalysisVisuals } from './analysis-visuals';
+import { DecisionJournal } from './decision-journal';
 export function ForecastRoom({questionId}: {questionId: string}) {
   const [room, setRoom] = useState<ForecastRoomData | null>(null);
   const [error, setError] = useState('');
@@ -32,6 +33,7 @@ export function ForecastRoom({questionId}: {questionId: string}) {
     <AnalysisVisuals questionId={questionId} />
     <ForecastEditor questionId={questionId} current={room.human_forecast} onSaved={record =>
       setRoom(current => current && ({...current, human_forecast: record, history: [...current.history, record]}))} />
+      <DecisionJournal questionId={questionId} autoLoad={false} />
     <section aria-label="Human forecast history"><h2>Human forecast history</h2>
       {room.history.length === 0 ? <p>No human forecasts recorded yet.</p> : <ol>
         {room.history.map(record => <li key={record.id}>

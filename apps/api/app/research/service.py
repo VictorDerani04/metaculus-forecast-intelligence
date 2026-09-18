@@ -67,6 +67,13 @@ def decide_candidate(session, item_id, user_id, payload):
         session.rollback()
         raise HTTPException(status_code=409, detail='Research decision changed; refresh and retry')
     session.add(ResearchDecision(research_item_id=item.id, user_id=user_id, decision=payload.decision, related_item_id=payload.related_item_id))
+    from app.audit.service import record_audit
+    record_audit(
+        session, user_id=user_id, question_id=item.question_id,
+        action=f"evidence_{payload.decision}" if payload.decision == 'approved' else f"research_{payload.decision}",
+        entity_type='research_item', entity_id=item.id,
+        metadata={'related_item_id': payload.related_item_id},
+    )
     if payload.decision == 'approved':
         evidence = Evidence(dependency_evidence_ids=payload.dependency_evidence_ids, research_item_id=item.id, question_id=item.question_id, user_id=user_id,
                             **{field: getattr(item, field) for field in ('title', 'summary', 'source_url', 'source_name')})

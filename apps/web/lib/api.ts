@@ -117,6 +117,35 @@ export async function saveHumanForecast(id: string, probability: number, rationa
   if (!response.ok) throw new Error('Failed to save human forecast');
   return response.json() as Promise<HumanForecast>;
 }
+export type DecisionRecord = {
+  id: string; user_id: string; question_id: string; competition_id: string;
+  human_probability: number | null; rationale: string;
+  prior_probability: number | null; model_probability: number | null;
+  crowd_probability: number | null; evidence_ids: string[];
+  model_spec_id: string | null; model_run_id: string | null; created_at: string;
+};
+export type AuditEvent = {
+  id: string; action: string; entity_type: string; entity_id: string;
+  question_id: string | null; details: Record<string, unknown>; created_at: string;
+};
+export async function listDecisions(id: string): Promise<DecisionRecord[]> {
+  const response = await fetch(`${API_BASE_URL}/questions/${encodeURIComponent(id)}/decisions`, {credentials: 'include'});
+  if (!response.ok) throw new Error('Failed to load decision journal');
+  return response.json() as Promise<DecisionRecord[]>;
+}
+export async function recordDecision(id: string, rationale: string): Promise<DecisionRecord> {
+  const response = await fetch(`${API_BASE_URL}/questions/${encodeURIComponent(id)}/decisions`, {
+    method: 'POST', credentials: 'include', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({rationale}),
+  });
+  if (!response.ok) throw new Error('Failed to record decision');
+  return response.json() as Promise<DecisionRecord>;
+}
+export async function listAuditEvents(id: string): Promise<AuditEvent[]> {
+  const response = await fetch(`${API_BASE_URL}/questions/${encodeURIComponent(id)}/audit`, {credentials: 'include'});
+  if (!response.ok) throw new Error('Failed to load audit history');
+  return response.json() as Promise<AuditEvent[]>;
+}
 export type QuestionSummary = {id: string; competition_id: string; title: string};
 export async function listQuestions(competitionId: string): Promise<QuestionSummary[]> {
   const response = await fetch(`${API_BASE_URL}/competitions/${encodeURIComponent(competitionId)}/questions`, {credentials: 'include'});

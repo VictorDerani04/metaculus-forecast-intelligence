@@ -8,7 +8,10 @@ import {
   listCompetitions,
   createCompetition,
   type Competition,
+  listAttention,
+  type AttentionItem,
 } from "../../lib/api";
+import { QuestionTable } from '../../components/question-table';
 
 
 type CompetitionSummary = {
@@ -52,9 +55,12 @@ export default function CompetitionsPage() {
   const [competitions, setCompetitions] = useState<Competition[]>([]);
   const [name, setName] = useState('');
   const [error, setError] = useState('');
+  const [attention, setAttention] = useState<AttentionItem[] | null>(null);
+  const [attentionError, setAttentionError] = useState(false);
 
   useEffect(() => {
     void listCompetitions().then(setCompetitions);
+    void listAttention().then(setAttention).catch(() => setAttentionError(true));
   }, []);
 
   return (
@@ -84,6 +90,9 @@ export default function CompetitionsPage() {
         questionCount: competition.question_count,
       }))}
     />
+    {!attention && !attentionError && <p role="status">Loading attention priorities...</p>}
+    {attentionError && <p role="alert">Unable to load attention priorities.</p>}
+    {attention && <QuestionTable questions={attention} />}
     </>
   );
 }

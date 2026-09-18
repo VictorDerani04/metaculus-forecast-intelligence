@@ -11,9 +11,19 @@ from app.competitions.schemas import QuestionImport, ImportedQuestionResponse
 from app.competitions.service import import_question, QuestionProvider
 from app.integrations.metaculus.dependencies import get_metaculus_client
 from app.integrations.metaculus.client import MetaculusUnavailable
+from app.analytics.priority import list_attention_questions, AttentionQuestion
 
 
 router = APIRouter(prefix="/competitions", tags=["competitions"])
+
+
+@router.get("/attention", response_model=list[AttentionQuestion])
+def attention_dashboard(
+    request: Request,
+    user: Annotated[User, Depends(get_current_user)],
+):
+    with request.app.state.session_factory() as session:
+        return list_attention_questions(session, user.id)
 
 
 class CompetitionCreate(BaseModel):

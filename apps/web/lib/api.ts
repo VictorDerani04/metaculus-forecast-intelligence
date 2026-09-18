@@ -123,6 +123,28 @@ export async function listQuestions(competitionId: string): Promise<QuestionSumm
   if (!response.ok) throw new Error('Failed to load questions');
   return response.json() as Promise<QuestionSummary[]>;
 }
+export type PriorityComponent = {name: string; value: number; contribution: number};
+export type AttentionItem = {
+  question_id: string; title: string; competition_id: string;
+  priority: {score: number; components: PriorityComponent[]; reasons: string[]};
+  human_probability: number | null; model_probability: number | null;
+  crowd_probability: number | null; resolve_at: string | null;
+};
+export async function listAttention(): Promise<AttentionItem[]> {
+  const response = await fetch(`${API_BASE_URL}/competitions/attention`, {credentials: 'include'});
+  if (!response.ok) throw new Error('Failed to load attention priorities');
+  const payload: unknown = await response.json();
+  if (!Array.isArray(payload)) return [];
+  return payload.filter((item): item is AttentionItem => {
+    if (!item || typeof item !== 'object') return false;
+    const candidate = item as Partial<AttentionItem>;
+    return typeof candidate.question_id === 'string'
+      && typeof candidate.title === 'string'
+      && !!candidate.priority
+      && typeof candidate.priority.score === 'number'
+      && Array.isArray(candidate.priority.reasons);
+  });
+}
 
 export type ResearchStatus = 'candidate' | 'approved' | 'rejected' | 'deferred' | 'duplicate' | 'superseded';
 export type ResearchDecision = {id: number; user_id: string; decision: ResearchStatus; created_at: string; related_item_id: string | null};

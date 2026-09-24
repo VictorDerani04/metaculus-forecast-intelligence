@@ -6,6 +6,10 @@ from app.auth.routes import get_current_user
 from app.audit.service import record_audit
 from app.monitoring.schemas import MonitoringEnable, MonitoringStatusResponse, MonitoringRunResponse
 from app.monitoring.service import disable_monitoring, enable_monitoring, enqueue_manual_run, get_status, list_runs
+from app.forecasts.service import get_owned_question
+from app.monitoring.models import Finding
+from sqlalchemy import select
+from pydantic import BaseModel, ConfigDict
 
 router = APIRouter(prefix='/questions', tags=['monitoring'])
 
@@ -40,3 +44,14 @@ def monitoring_run(question_id: str, request: Request, user: Annotated[User, Dep
 def monitoring_runs(question_id: str, request: Request, user: Annotated[User, Depends(get_current_user)]):
     with request.app.state.session_factory() as session:
         return list_runs(session, user_id=user.id, question_id=question_id)
+
+class FindingResponse(BaseModel):
+    id: str; provider: str; source_url: str | None; canonical_url: str | None; title: str; summary: str; source_name: str; source_domain: str | None
+    relevance_class: str; relevance_score: float; relevance_reason: str; materiality_class: str; materiality_score: float; materiality_reason: str; status: str
+    model_config = ConfigDict(from_attributes=True)
+
+@router.get('/{question_id}/findings', response_model=list[FindingResponse])
+def findings(question_id: str, request: Request, user: Annotated[User, Depends(get_current_user)]):
+    with request.app.state.session_factory() as session:
+        get_owned_question(session, question_id, user.id)
+        return [FindingResponse.model_validate(row) for row in session.scalars(select(Finding).where(Finding.question_id == question_id, Finding.user_id == user.id).order_by(Finding.discovered_at.desc(), Finding.id.desc())).all()]

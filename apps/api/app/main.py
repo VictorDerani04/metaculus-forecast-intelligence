@@ -11,7 +11,7 @@ from app.competitions.routes import router as competitions_router
 from app.forecasts.routes import router as forecasts_router
 from app.forecasts.models import install_history_guards
 from app.research.routes import router as research_router
-from app.research.models import install_evidence_guards
+from app.research.models import install_evidence_guards, install_research_schema_upgrades
 from app.copilot.provider import UnavailableCopilotProvider
 from app.copilot.routes import router as copilot_router
 from app.models_lab.routes import router as models_router
@@ -37,6 +37,7 @@ def create_app(
     Base.metadata.create_all(engine)
     install_history_guards(engine)
     install_evidence_guards(engine)
+    install_research_schema_upgrades(engine)
     install_model_guards(engine)
     install_audit_guards(engine)
     install_journal_guards(engine)

@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from enum import Enum
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, JSON, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -43,7 +43,8 @@ class MonitoringRun(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), nullable=False, index=True)
     question_id: Mapped[str] = mapped_column(ForeignKey('questions.id'), nullable=False, index=True)
-    job_id: Mapped[str] = mapped_column(ForeignKey('background_jobs.id'), nullable=False, unique=True)
+    # A retry is another immutable execution attempt of the same job.
+    job_id: Mapped[str] = mapped_column(ForeignKey('background_jobs.id'), nullable=False, index=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[str] = mapped_column(String(20), default=MonitoringRunStatus.RUNNING.value, nullable=False)
@@ -58,6 +59,60 @@ class MonitoringRun(Base):
     digest_findings: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     candidates_created: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     safe_error_summary: Mapped[str | None] = mapped_column(String(255))
+
+class ProviderCursor(Base):
+    __tablename__ = 'provider_cursors'
+    __table_args__ = (UniqueConstraint('user_id', 'question_id', 'provider', name='uq_provider_cursor'),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), nullable=False, index=True)
+    question_id: Mapped[str] = mapped_column(ForeignKey('questions.id'), nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(80), nullable=False)
+    cursor_value: Mapped[str | None] = mapped_column(String(500))
+    last_seen_timestamp: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_seen_external_id: Mapped[str | None] = mapped_column(String(255))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow, nullable=False)
+
+class RawFinding(Base):
+    __tablename__ = 'raw_findings'
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), nullable=False, index=True)
+    question_id: Mapped[str] = mapped_column(ForeignKey('questions.id'), nullable=False, index=True)
+    monitoring_run_id: Mapped[str] = mapped_column(ForeignKey('monitoring_runs.id'), nullable=False, index=True)
+    provider: Mapped[str] = mapped_column(String(80), nullable=False)
+    external_id: Mapped[str | None] = mapped_column(String(255))
+    source_url: Mapped[str | None] = mapped_column(Text)
+    raw_title: Mapped[str | None] = mapped_column(Text)
+    raw_text: Mapped[str | None] = mapped_column(Text)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    retrieved_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    raw_metadata_json: Mapped[dict] = mapped_column(JSON, default=dict, nullable=False)
+
+class Finding(Base):
+    __tablename__ = 'findings'
+    __table_args__ = (UniqueConstraint('user_id', 'question_id', 'content_fingerprint', name='uq_finding_fingerprint'),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), nullable=False, index=True)
+    question_id: Mapped[str] = mapped_column(ForeignKey('questions.id'), nullable=False, index=True)
+    monitoring_run_id: Mapped[str] = mapped_column(ForeignKey('monitoring_runs.id'), nullable=False)
+    raw_finding_id: Mapped[str] = mapped_column(ForeignKey('raw_findings.id'), nullable=False)
+    provider: Mapped[str] = mapped_column(String(80), nullable=False)
+    provider_external_id: Mapped[str | None] = mapped_column(String(255))
+    source_url: Mapped[str | None] = mapped_column(Text)
+    canonical_url: Mapped[str | None] = mapped_column(Text)
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    source_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    source_domain: Mapped[str | None] = mapped_column(String(255))
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    discovered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    content_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    relevance_class: Mapped[str] = mapped_column(String(20), default='uncertain', nullable=False)
+    relevance_score: Mapped[float] = mapped_column(Float, default=0, nullable=False)
+    relevance_reason: Mapped[str] = mapped_column(Text, default='', nullable=False)
+    materiality_class: Mapped[str] = mapped_column(String(20), default='irrelevant', nullable=False)
+    materiality_score: Mapped[float] = mapped_column(Float, default=0, nullable=False)
+    materiality_reason: Mapped[str] = mapped_column(Text, default='', nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default='new', nullable=False)
 
 
 def install_monitoring_guards(engine) -> None:

@@ -283,7 +283,7 @@ export function getAnalysis(questionId: string, modelId: string): Promise<Analys
   return modelRequest(`/questions/${encodeURIComponent(questionId)}/analysis/${encodeURIComponent(modelId)}`);
 }
 
-export type MonitoringRun = {id: string; job_id: string; status: string; started_at: string; completed_at: string | null; safe_error_summary: string | null};
+export type MonitoringRun = {id: string; job_id: string; status: string; started_at: string; completed_at: string | null; safe_error_summary: string | null; raw_items_seen?: number; normalized_findings?: number; candidates_created?: number};
 export type MonitoringStatus = {id: string; enabled: boolean; monitoring_interval_minutes: number; last_run_at: string | null; last_success_at: string | null; next_run_at: string | null; latest_run: MonitoringRun | null};
 async function monitoringRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {credentials: 'include', ...init, headers: {'Content-Type': 'application/json', ...init?.headers}});

@@ -8,6 +8,7 @@ import { CopilotChat } from './copilot-chat';
 import { ModelWorkspace } from './model-workspace';
 import { AnalysisVisuals } from './analysis-visuals';
 import { DecisionJournal } from './decision-journal';
+import { MonitoringPanel } from './monitoring-panel';
 export function ForecastRoom({questionId}: {questionId: string}) {
   const [room, setRoom] = useState<ForecastRoomData | null>(null);
   const [error, setError] = useState('');
@@ -44,6 +45,7 @@ export function ForecastRoom({questionId}: {questionId: string}) {
       </ol>}
     </section>
     <ResearchInbox key={questionId} questionId={questionId} />
+    <MonitoringPanel questionId={questionId} />
     <CopilotChat key={`copilot-${questionId}`} questionId={questionId} />
   </main>;
 }

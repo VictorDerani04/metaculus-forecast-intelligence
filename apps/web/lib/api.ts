@@ -282,3 +282,15 @@ export type AnalysisData = {
 export function getAnalysis(questionId: string, modelId: string): Promise<AnalysisData> {
   return modelRequest(`/questions/${encodeURIComponent(questionId)}/analysis/${encodeURIComponent(modelId)}`);
 }
+
+export type MonitoringRun = {id: string; job_id: string; status: string; started_at: string; completed_at: string | null; safe_error_summary: string | null};
+export type MonitoringStatus = {id: string; enabled: boolean; monitoring_interval_minutes: number; last_run_at: string | null; last_success_at: string | null; next_run_at: string | null; latest_run: MonitoringRun | null};
+async function monitoringRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {credentials: 'include', ...init, headers: {'Content-Type': 'application/json', ...init?.headers}});
+  if (!response.ok) throw new Error('Monitoring request failed');
+  return response.json() as Promise<T>;
+}
+export function getMonitoring(questionId: string): Promise<MonitoringStatus> { return monitoringRequest(`/questions/${encodeURIComponent(questionId)}/monitoring`); }
+export function enableMonitoring(questionId: string): Promise<MonitoringStatus> { return monitoringRequest(`/questions/${encodeURIComponent(questionId)}/monitoring/enable`, {method: 'POST', body: '{}'}); }
+export function disableMonitoring(questionId: string): Promise<MonitoringStatus> { return monitoringRequest(`/questions/${encodeURIComponent(questionId)}/monitoring/disable`, {method: 'POST'}); }
+export function monitorNow(questionId: string): Promise<{job_id: string; status: string}> { return monitoringRequest(`/questions/${encodeURIComponent(questionId)}/monitoring/run`, {method: 'POST'}); }

@@ -35,7 +35,7 @@ def _finish(session_factory, *, job_id, run_id, config_id, total, attempted, suc
             job.status, job.scheduled_for, job.finished_at = (JobStatus.RETRY_WAIT.value if job.attempt_count < job.max_attempts else JobStatus.FAILED.value), retry_at(job.attempt_count, now=now), now
         log_event('monitoring_run_finished', job_id=job_id, status=job.status, attempt_count=job.attempt_count, safe_error_code=error_code)
 
-def run_one_monitoring_job(session_factory, providers, relevance=None, materiality=None):
+def run_one_monitoring_job(session_factory, providers, relevance=None, materiality=None, classifier=None):
     job = claim_next_job(session_factory, job_types=('monitor_question',))
     if not job: return None
     with session_factory.begin() as session:
@@ -52,14 +52,18 @@ def run_one_monitoring_job(session_factory, providers, relevance=None, materiali
         for name, provider in selected:
             attempted += 1
             result = provider.fetch(context, current_cursor(session_factory, user_id=user_id, question_id=question_id, provider=name))
+            selected_relevance = classifier or relevance
+            selected_materiality = classifier or materiality
+            if result.items and (selected_relevance is None or selected_materiality is None):
+                raise ProviderFailure('classifier_unavailable')
             counts = process_provider_result(session_factory, user_id=user_id, question_id=question_id, run_id=run_id, provider=name,
-                items=result.items, next_cursor=result.next_cursor, question=context, relevance=relevance or FakeRelevanceClassifier(), materiality=materiality or FakeMaterialityClassifier())
+                items=result.items, next_cursor=result.next_cursor, question=context, relevance=selected_relevance, materiality=selected_materiality)
             _add(total, counts); succeeded += 1
     except IngestionFailure as exc:
         _add(total, exc.counts); failed += 1; _finish(session_factory, job_id=job_id, run_id=run_id, config_id=config_id, total=total, attempted=attempted, succeeded=succeeded, failed=failed, error_code=exc.code)
         return job_id
     except ProviderFailure as exc:
-        failed += 1; code = exc.code if exc.code in {'provider_failure', 'provider_unavailable', 'provider_timeout', 'rate_limited', 'provider_authentication_failure', 'malformed_provider_response'} else 'provider_failure'
+        failed += 1; code = exc.code if exc.code in {'provider_failure', 'provider_unavailable', 'provider_timeout', 'rate_limited', 'provider_authentication_failure', 'malformed_provider_response', 'classifier_unavailable', 'malformed_classifier_response'} else 'provider_failure'
         _finish(session_factory, job_id=job_id, run_id=run_id, config_id=config_id, total=total, attempted=attempted, succeeded=succeeded, failed=failed, error_code=code)
         return job_id
     except Exception:
@@ -67,3 +71,8 @@ def run_one_monitoring_job(session_factory, providers, relevance=None, materiali
         return job_id
     _finish(session_factory, job_id=job_id, run_id=run_id, config_id=config_id, total=total, attempted=attempted, succeeded=succeeded, failed=failed)
     return job_id
+
+
+def run_one_configured_monitoring_job(app):
+    """Production entry point using only the application's owned registries."""
+    return run_one_monitoring_job(app.state.session_factory, app.state.monitoring_providers, classifier=app.state.monitoring_classifier)

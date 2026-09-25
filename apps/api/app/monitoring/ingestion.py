@@ -32,7 +32,16 @@ def _draft(item, provider):
 
 def _classify(question, draft, relevance, materiality):
     try:
-        return validate_relevance(relevance.classify(question, draft)), validate_materiality(materiality.classify(question, draft)), None
+        if hasattr(relevance, 'classify_both'):
+            pair = relevance.classify_both(question, draft)
+            rel, mat = validate_relevance(pair[0]), validate_materiality(pair[1])
+        else:
+            rel, mat = validate_relevance(relevance.classify(question, draft)), validate_materiality(materiality.classify(question, draft))
+        # Materiality is meaningful only after relevance is established. Persist this
+        # conservative routing result rather than letting contradictory output alert.
+        if rel.relevance_class != 'relevant':
+            mat = MaterialityResult('irrelevant', 0, 'Relevance is not established.', mat.confidence, 'neutral', mat.provider, mat.model, mat.classified_at, mat.schema_version)
+        return rel, mat, None
     except Exception:
         # Preserve reviewable data but never derive a candidate from malformed AI output.
         return RelevanceResult('uncertain', 0, 'Classification unavailable'), MaterialityResult('irrelevant', 0, 'Classification unavailable'), 'classification_failure'
@@ -56,8 +65,10 @@ def ingest_item(session, *, user_id, question_id, run_id, provider, item, questi
                       canonical_url=draft['url'], title=draft['title'], summary=draft['summary'], source_name=draft['source_name'],
                       source_domain=urlsplit(draft['url']).netloc if draft['url'] else None, published_at=draft['published_at'],
                       content_fingerprint=draft['fingerprint'], relevance_class=rel.relevance_class, relevance_score=rel.score,
-                      relevance_reason=rel.reason, materiality_class=mat.materiality_class, materiality_score=mat.score,
-                      materiality_reason=mat.reason)
+                      relevance_confidence=rel.confidence, relevance_reason=rel.reason, materiality_class=mat.materiality_class,
+                      materiality_score=mat.score, materiality_confidence=mat.confidence, materiality_direction=mat.direction,
+                      materiality_reason=mat.reason, classifier_provider=rel.provider, classifier_model=rel.model,
+                      classified_at=rel.classified_at, classifier_schema_version=rel.schema_version)
     session.add(finding); session.flush(); counts['normalized'] = 1
     route_finding(session, finding); session.flush()
     if rel.relevance_class == 'relevant': counts['relevant'] = 1

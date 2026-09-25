@@ -109,10 +109,17 @@ class Finding(Base):
     content_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
     relevance_class: Mapped[str] = mapped_column(String(20), default='uncertain', nullable=False)
     relevance_score: Mapped[float] = mapped_column(Float, default=0, nullable=False)
+    relevance_confidence: Mapped[float] = mapped_column(Float, default=0, nullable=False)
     relevance_reason: Mapped[str] = mapped_column(Text, default='', nullable=False)
     materiality_class: Mapped[str] = mapped_column(String(20), default='irrelevant', nullable=False)
     materiality_score: Mapped[float] = mapped_column(Float, default=0, nullable=False)
+    materiality_confidence: Mapped[float] = mapped_column(Float, default=0, nullable=False)
+    materiality_direction: Mapped[str] = mapped_column(String(20), default='neutral', nullable=False)
     materiality_reason: Mapped[str] = mapped_column(Text, default='', nullable=False)
+    classifier_provider: Mapped[str] = mapped_column(String(80), default='fake', nullable=False)
+    classifier_model: Mapped[str] = mapped_column(String(120), default='deterministic', nullable=False)
+    classified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    classifier_schema_version: Mapped[str] = mapped_column(String(80), default='stage-3.2-v1', nullable=False)
     status: Mapped[str] = mapped_column(String(20), default='new', nullable=False)
 
 
@@ -133,11 +140,25 @@ def install_monitoring_guards(engine) -> None:
 
 
 def install_monitoring_schema_upgrades(engine) -> None:
-    """Apply the one additive compatibility change needed by Task 5 startup."""
+    """Apply additive compatibility upgrades for deployments without migrations."""
     with engine.begin() as connection:
-        columns = {column['name'] for column in inspect(connection).get_columns('monitoring_configs')}
-        if 'adaptive_schedule_enabled' not in columns:
+        config_columns = {column['name'] for column in inspect(connection).get_columns('monitoring_configs')}
+        if 'adaptive_schedule_enabled' not in config_columns:
             default = 'TRUE' if engine.dialect.name == 'postgresql' else '1'
             connection.exec_driver_sql(
                 f'ALTER TABLE monitoring_configs ADD COLUMN adaptive_schedule_enabled BOOLEAN NOT NULL DEFAULT {default}'
             )
+        inspector = inspect(connection)
+        finding_columns = {column['name'] for column in inspector.get_columns('findings')} if inspector.has_table('findings') else set()
+        upgrades = {
+            'relevance_confidence': 'FLOAT NOT NULL DEFAULT 0',
+            'materiality_confidence': 'FLOAT NOT NULL DEFAULT 0',
+            "materiality_direction": "VARCHAR(20) NOT NULL DEFAULT 'neutral'",
+            "classifier_provider": "VARCHAR(80) NOT NULL DEFAULT 'fake'",
+            "classifier_model": "VARCHAR(120) NOT NULL DEFAULT 'deterministic'",
+            'classified_at': 'TIMESTAMP WITH TIME ZONE',
+            "classifier_schema_version": "VARCHAR(80) NOT NULL DEFAULT 'stage-3.2-v1'",
+        }
+        for column, definition in upgrades.items():
+            if finding_columns and column not in finding_columns:
+                connection.exec_driver_sql(f'ALTER TABLE findings ADD COLUMN {column} {definition}')

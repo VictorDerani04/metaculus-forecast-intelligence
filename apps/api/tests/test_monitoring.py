@@ -88,6 +88,54 @@ def test_classifier_failure_keeps_finding_but_does_not_advance_cursor_or_create_
     assert client.get(f"/questions/{question['id']}/research").json()['items'] == []
 
 
+def test_finding_persists_exact_bounded_classifier_provenance(tmp_path):
+    from datetime import datetime, timezone
+    from sqlalchemy import select
+    from test_competitions import login, make_client
+    from app.monitoring.classification import MaterialityResult, RelevanceResult
+    from app.monitoring.ingestion import ingest
+    from app.monitoring.models import Finding, MonitoringRun
+
+    class Relevance:
+        def classify(self, question, finding):
+            return RelevanceResult('relevant', .8, 'Direct evidence.', .85, 'openai', 'gpt-4o-mini', datetime(2026, 9, 25, tzinfo=timezone.utc))
+    class Materiality:
+        def classify(self, question, finding):
+            return MaterialityResult('material', .8, 'Meaningful update.', .9, 'down', 'openai', 'gpt-4o-mini', datetime(2026, 9, 25, tzinfo=timezone.utc))
+
+    app, client = make_client(tmp_path); login(app, client)
+    competition = client.post('/competitions', json={'name': 'Provenance'}).json(); question = client.post(f"/competitions/{competition['id']}/questions", json={'title': 'Question'}).json(); user_id = client.get('/auth/me').json()['id']
+    with app.state.session_factory.begin() as session:
+        run = MonitoringRun(user_id=user_id, question_id=question['id'], job_id='provenance-job'); session.add(run); session.flush()
+        ingest(session, user_id=user_id, question_id=question['id'], run_id=run.id, provider='web', items=[{'external_id': 'p', 'url': 'https://example.com/p', 'title': 'Provenance', 'text': 'Evidence', 'source_name': 'Example'}], next_cursor='p', relevance=Relevance(), materiality=Materiality())
+    with app.state.session_factory() as session:
+        finding = session.scalar(select(Finding).where(Finding.question_id == question['id']))
+        assert (finding.classifier_provider, finding.classifier_model, finding.relevance_confidence, finding.materiality_confidence, finding.materiality_direction, finding.classifier_schema_version) == ('openai', 'gpt-4o-mini', .85, .9, 'down', 'stage-3.2-v1')
+
+
+def test_irrelevant_or_uncertain_relevance_cannot_route_a_materiality_alert(tmp_path):
+    from sqlalchemy import func, select
+    from test_competitions import login, make_client
+    from app.monitoring.alerts import AlertEvent, DigestItem
+    from app.monitoring.classification import FakeMaterialityClassifier, RelevanceResult
+    from app.monitoring.ingestion import ingest
+    from app.monitoring.models import Finding, MonitoringRun
+
+    class Uncertain:
+        def classify(self, question, finding): return RelevanceResult('uncertain', .3, 'Insufficient evidence.', .2)
+
+    app, client = make_client(tmp_path); login(app, client)
+    competition = client.post('/competitions', json={'name': 'Conservative'}).json(); question = client.post(f"/competitions/{competition['id']}/questions", json={'title': 'Question'}).json(); user_id = client.get('/auth/me').json()['id']
+    with app.state.session_factory.begin() as session:
+        run = MonitoringRun(user_id=user_id, question_id=question['id'], job_id='conservative-job'); session.add(run); session.flush()
+        ingest(session, user_id=user_id, question_id=question['id'], run_id=run.id, provider='web', items=[{'external_id': 'u', 'url': 'https://example.com/u', 'title': 'Uncertain', 'text': 'Weak signal', 'source_name': 'Example'}], next_cursor='u', relevance=Uncertain(), materiality=FakeMaterialityClassifier())
+    with app.state.session_factory() as session:
+        finding = session.scalar(select(Finding).where(Finding.question_id == question['id']))
+        assert finding.materiality_class == 'irrelevant'
+        assert session.scalar(select(func.count(AlertEvent.id))) == 0
+        assert session.scalar(select(func.count(DigestItem.id))) == 0
+
+
 def test_retry_after_partial_provider_result_deduplicates_and_advances_once(tmp_path):
     from sqlalchemy import func, select
     from test_competitions import login, make_client

@@ -1,4 +1,5 @@
 from typing import Annotated
+from datetime import datetime
 from fastapi import APIRouter, Depends, Request, status
 
 from app.auth.models import User
@@ -47,7 +48,9 @@ def monitoring_runs(question_id: str, request: Request, user: Annotated[User, De
 
 class FindingResponse(BaseModel):
     id: str; provider: str; source_url: str | None; canonical_url: str | None; title: str; summary: str; source_name: str; source_domain: str | None
-    relevance_class: str; relevance_score: float; relevance_reason: str; materiality_class: str; materiality_score: float; materiality_reason: str; status: str
+    relevance_class: str; relevance_score: float; relevance_confidence: float; relevance_reason: str
+    materiality_class: str; materiality_score: float; materiality_confidence: float; materiality_direction: str; materiality_reason: str
+    classifier_provider: str; classifier_model: str; classified_at: datetime | None; classifier_schema_version: str; status: str
     model_config = ConfigDict(from_attributes=True)
 
 @router.get('/{question_id}/findings', response_model=list[FindingResponse])

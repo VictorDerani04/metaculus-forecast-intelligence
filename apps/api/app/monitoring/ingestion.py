@@ -8,6 +8,7 @@ from app.monitoring.classification import MaterialityResult, RelevanceResult, va
 from app.monitoring.models import Finding, ProviderCursor, RawFinding
 from app.monitoring.normalization import canonicalize_url, fingerprint, normalize_text
 from app.research.models import ResearchItem
+from app.monitoring.alerts import route_finding
 
 
 @dataclass
@@ -58,6 +59,7 @@ def ingest_item(session, *, user_id, question_id, run_id, provider, item, questi
                       relevance_reason=rel.reason, materiality_class=mat.materiality_class, materiality_score=mat.score,
                       materiality_reason=mat.reason)
     session.add(finding); session.flush(); counts['normalized'] = 1
+    route_finding(session, finding); session.flush()
     if rel.relevance_class == 'relevant': counts['relevant'] = 1
     if mat.materiality_class in {'material', 'critical'}: counts['material'] = 1
     if rel.relevance_class == 'relevant' and mat.materiality_class in {'material', 'critical'}:

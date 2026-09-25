@@ -154,3 +154,83 @@ def test_worker_provider_failure_is_safe_retryable_and_later_success_is_truthful
         assert [run.status for run in runs] == ['failed', 'succeeded']
         assert config.last_success_at is not None
         assert session.scalar(select(ProviderCursor.cursor_value).where(ProviderCursor.question_id == question['id'])) == 'after-success'
+
+
+def test_alert_and_digest_routing_lifecycle_and_owner_isolation(tmp_path):
+    """Task 3 attention artifacts are exclusive, owned, and non-consequential."""
+    from datetime import timezone
+    from sqlalchemy import func, select
+    from fastapi.testclient import TestClient
+    from test_competitions import login, make_client
+    from app.auth.seed import seed_private_user
+    from app.monitoring.classification import FakeRelevanceClassifier, MaterialityResult
+    from app.monitoring.ingestion import ingest
+    from app.monitoring.models import MonitoringRun
+    from app.monitoring.alerts import AlertEvent, DigestItem
+
+    class RoutedMateriality:
+        def classify(self, question, draft):
+            return MaterialityResult('digest' if draft['title'] == 'Digest' else 'critical', .9, 'Persisted route')
+
+    app, owner = make_client(tmp_path); login(app, owner)
+    competition = owner.post('/competitions', json={'name': 'Attention'}).json()
+    question = owner.post(f"/competitions/{competition['id']}/questions", json={'title': 'Question'}).json()
+    user_id = owner.get('/auth/me').json()['id']
+    with app.state.session_factory() as session:
+        run = MonitoringRun(user_id=user_id, question_id=question['id'], job_id='attention-job'); session.add(run); session.flush()
+        ingest(session, user_id=user_id, question_id=question['id'], run_id=run.id, provider='web', next_cursor='a',
+               items=[{'external_id': 'alert', 'url': 'https://example.com/alert', 'title': 'Alert', 'text': 'A', 'source_name': 'Example'},
+                      {'external_id': 'digest', 'url': 'https://example.com/digest', 'title': 'Digest', 'text': 'D', 'source_name': 'Example'}],
+               relevance=FakeRelevanceClassifier(), materiality=RoutedMateriality())
+        session.commit()
+        assert session.scalar(select(func.count(AlertEvent.id))) == 1
+        digest_item = session.scalar(select(DigestItem)); assert digest_item is not None
+        digest_period_start = digest_item.eligible_at.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=timezone.utc)
+    alerts = owner.get('/alerts'); assert alerts.status_code == 200 and len(alerts.json()) == 1
+    assert alerts.json()[0]['question_title'] == 'Question'
+    alert_id = alerts.json()[0]['id']
+    assert owner.post(f'/alerts/{alert_id}/seen').json()['status'] == 'seen'
+    assert owner.post(f'/alerts/{alert_id}/seen').json()['status'] == 'seen'
+    assert owner.post(f'/alerts/{alert_id}/dismiss').json()['status'] == 'dismissed'
+    digest = owner.get('/digests'); assert digest.status_code == 200 and digest.json() == []
+    from app.monitoring.alerts import generate_daily_digest
+    with app.state.session_factory.begin() as session:
+        from datetime import timedelta
+        created = generate_daily_digest(session, user_id=user_id, period_start=digest_period_start, period_end=digest_period_start + timedelta(days=1))
+        again = generate_daily_digest(session, user_id=user_id, period_start=digest_period_start, period_end=digest_period_start + timedelta(days=1))
+        assert created.id == again.id
+    digest = owner.get('/digests'); assert len(digest.json()) == 1
+    detail = owner.get(f"/digests/{digest.json()[0]['id']}"); assert detail.status_code == 200 and [item['finding']['title'] for item in detail.json()['items']] == ['Digest']
+    seed_private_user(app.state.session_factory, 'other@example.com', 'other-password')
+    other = TestClient(app); other.post('/auth/login', json={'email': 'other@example.com', 'password': 'other-password'})
+    assert other.get('/alerts').json() == []
+    assert other.post(f'/alerts/{alert_id}/dismiss').status_code == 404
+    assert other.get(f"/digests/{digest.json()[0]['id']}").status_code == 404
+
+
+def test_task3_route_failure_keeps_cursor_unchanged_until_retry(tmp_path, monkeypatch):
+    from sqlalchemy import func, select
+    from test_competitions import login, make_client
+    from app.monitoring.classification import FakeMaterialityClassifier, FakeRelevanceClassifier
+    from app.monitoring.ingestion import process_provider_result
+    from app.monitoring.models import Finding, MonitoringRun, ProviderCursor
+    from app.monitoring.alerts import AlertEvent
+    app, client = make_client(tmp_path); login(app, client)
+    competition = client.post('/competitions', json={'name': 'Cursor'}).json(); question = client.post(f"/competitions/{competition['id']}/questions", json={'title': 'Question'}).json(); user_id = client.get('/auth/me').json()['id']
+    with app.state.session_factory.begin() as session:
+        run = MonitoringRun(user_id=user_id, question_id=question['id'], job_id='cursor-job'); session.add(run); session.flush(); run_id = run.id
+    import app.monitoring.ingestion as ingestion
+    monkeypatch.setattr(ingestion, 'route_finding', lambda session, finding: (_ for _ in ()).throw(RuntimeError('route persistence failed')))
+    item = {'external_id': 'route', 'url': 'https://example.com/route', 'title': 'Route', 'text': 'A', 'source_name': 'Example'}
+    try:
+        process_provider_result(app.state.session_factory, user_id=user_id, question_id=question['id'], run_id=run_id, provider='web', items=[item], next_cursor='advanced', question=None, relevance=FakeRelevanceClassifier(), materiality=FakeMaterialityClassifier())
+    except RuntimeError: pass
+    with app.state.session_factory() as session:
+        assert session.scalar(select(ProviderCursor).where(ProviderCursor.question_id == question['id'])) is None
+        assert session.scalar(select(func.count(Finding.id))) == 0
+    monkeypatch.undo()
+    process_provider_result(app.state.session_factory, user_id=user_id, question_id=question['id'], run_id=run_id, provider='web', items=[item], next_cursor='advanced', question=None, relevance=FakeRelevanceClassifier(), materiality=FakeMaterialityClassifier())
+    with app.state.session_factory() as session:
+        assert session.scalar(select(func.count(Finding.id))) == 1
+        assert session.scalar(select(func.count(AlertEvent.id))) == 1
+        assert session.scalar(select(ProviderCursor.cursor_value).where(ProviderCursor.question_id == question['id'])) == 'advanced'

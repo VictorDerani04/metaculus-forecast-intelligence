@@ -294,3 +294,17 @@ export function getMonitoring(questionId: string): Promise<MonitoringStatus> { r
 export function enableMonitoring(questionId: string): Promise<MonitoringStatus> { return monitoringRequest(`/questions/${encodeURIComponent(questionId)}/monitoring/enable`, {method: 'POST', body: '{}'}); }
 export function disableMonitoring(questionId: string): Promise<MonitoringStatus> { return monitoringRequest(`/questions/${encodeURIComponent(questionId)}/monitoring/disable`, {method: 'POST'}); }
 export function monitorNow(questionId: string): Promise<{job_id: string; status: string}> { return monitoringRequest(`/questions/${encodeURIComponent(questionId)}/monitoring/run`, {method: 'POST'}); }
+
+export type AlertEvent = {id: string; question_id: string; question_title: string; finding_id: string; severity: string; reason: string; status: 'new'|'seen'|'dismissed'; created_at: string; seen_at: string | null; dismissed_at: string | null};
+export type DigestSummary = {id: string; period_start: string; period_end: string; status: string; generated_at: string; delivered_at: string | null};
+export type DigestDetail = DigestSummary & {items: {id: string; eligible_at: string; finding: {id: string; question_id: string; title: string; summary: string; materiality_class: string}}[]};
+async function attentionRequest<T>(path: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(`${API_BASE_URL}${path}`, {credentials: 'include', ...init, headers: {'Content-Type': 'application/json', ...init?.headers}});
+  if (!response.ok) throw new Error('Attention request failed');
+  return response.json() as Promise<T>;
+}
+export function listAlerts(): Promise<AlertEvent[]> { return attentionRequest('/alerts'); }
+export function seeAlert(id: string): Promise<AlertEvent> { return attentionRequest(`/alerts/${encodeURIComponent(id)}/seen`, {method: 'POST'}); }
+export function dismissAlert(id: string): Promise<AlertEvent> { return attentionRequest(`/alerts/${encodeURIComponent(id)}/dismiss`, {method: 'POST'}); }
+export function listDigests(): Promise<DigestSummary[]> { return attentionRequest('/digests'); }
+export function getDigest(id: string): Promise<DigestDetail> { return attentionRequest(`/digests/${encodeURIComponent(id)}`); }

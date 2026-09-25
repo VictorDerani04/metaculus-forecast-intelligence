@@ -308,3 +308,8 @@ export function seeAlert(id: string): Promise<AlertEvent> { return attentionRequ
 export function dismissAlert(id: string): Promise<AlertEvent> { return attentionRequest(`/alerts/${encodeURIComponent(id)}/dismiss`, {method: 'POST'}); }
 export function listDigests(): Promise<DigestSummary[]> { return attentionRequest('/digests'); }
 export function getDigest(id: string): Promise<DigestDetail> { return attentionRequest(`/digests/${encodeURIComponent(id)}`); }
+export type NotificationPreference = {id: string; user_id: string; channel: string; provider: string; enabled: boolean; immediate_alerts_enabled: boolean; digest_enabled: boolean};
+export type NotificationAttempt = {id: string; alert_event_id: string | null; digest_id: string | null; channel: string; provider: string; status: string; attempt_number: number; external_message_id: string | null; last_error_code: string | null; last_error_message: string | null};
+export function listNotificationPreferences(): Promise<NotificationPreference[]> { return attentionRequest('/notification-preferences'); }
+export function saveNotificationPreferences(value: Pick<NotificationPreference, 'enabled'|'immediate_alerts_enabled'|'digest_enabled'>): Promise<NotificationPreference> { return attentionRequest('/notification-preferences', {method:'PUT', body: JSON.stringify(value)}); }
+export function listNotificationAttempts(): Promise<NotificationAttempt[]> { return attentionRequest('/notification-attempts'); }

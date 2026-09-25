@@ -19,11 +19,13 @@ from app.models_lab.models import install_model_guards
 from app.analytics.routes import router as analytics_router
 from app.monitoring.routes import router as monitoring_router
 from app.monitoring.alert_routes import router as alerts_router
+from app.notifications.routes import router as notifications_router
 from app.audit.models import install_audit_guards, install_journal_guards
 from app.audit import models as audit_models
 from app.jobs import models as job_models
 from app.monitoring import models as monitoring_models
 from app.monitoring import alerts as alert_models
+from app.notifications import models as notification_models
 from app.db.base import Base
 from app.db.session import build_session_factory
 
@@ -72,6 +74,7 @@ def create_app(
     app.include_router(analytics_router)
     app.include_router(monitoring_router)
     app.include_router(alerts_router)
+    app.include_router(notifications_router)
 
     @app.get("/health")
     def health():

@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from enum import Enum
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, JSON, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, JSON, UniqueConstraint, inspect
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -29,6 +29,7 @@ class MonitoringConfig(Base):
     web_monitoring_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     news_monitoring_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     monitoring_interval_minutes: Mapped[int] = mapped_column(Integer, default=360, nullable=False)
+    adaptive_schedule_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     materiality_threshold: Mapped[float] = mapped_column(Float, default=.75, nullable=False)
     digest_threshold: Mapped[float] = mapped_column(Float, default=.30, nullable=False)
     last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -129,3 +130,14 @@ def install_monitoring_guards(engine) -> None:
                 BEGIN IF OLD.status IN ('succeeded', 'failed') THEN RAISE EXCEPTION 'Completed monitoring runs are immutable'; END IF; RETURN NEW; END; $$""")
             connection.exec_driver_sql("""CREATE OR REPLACE TRIGGER monitoring_runs_completed_no_mutation
                 BEFORE UPDATE OR DELETE ON monitoring_runs FOR EACH ROW EXECUTE FUNCTION reject_completed_monitoring_run_mutation()""")
+
+
+def install_monitoring_schema_upgrades(engine) -> None:
+    """Apply the one additive compatibility change needed by Task 5 startup."""
+    with engine.begin() as connection:
+        columns = {column['name'] for column in inspect(connection).get_columns('monitoring_configs')}
+        if 'adaptive_schedule_enabled' not in columns:
+            default = 'TRUE' if engine.dialect.name == 'postgresql' else '1'
+            connection.exec_driver_sql(
+                f'ALTER TABLE monitoring_configs ADD COLUMN adaptive_schedule_enabled BOOLEAN NOT NULL DEFAULT {default}'
+            )

@@ -23,7 +23,9 @@ def enable_monitoring(session, *, user_id, question_id, settings: MonitoringEnab
         config = MonitoringConfig(user_id=user_id, question_id=question_id)
         session.add(config)
     config.enabled = True
-    for field, value in settings.model_dump().items(): setattr(config, field, value)
+    values = settings.model_dump(exclude_none=True)
+    for field, value in values.items(): setattr(config, field, value)
+    config.adaptive_schedule_enabled = 'monitoring_interval_minutes' not in settings.model_fields_set
     config.next_run_at = utcnow()
     session.flush()
     record_audit(session, user_id=user_id, question_id=question_id, action='monitoring_enabled', entity_type='monitoring_config', entity_id=config.id)

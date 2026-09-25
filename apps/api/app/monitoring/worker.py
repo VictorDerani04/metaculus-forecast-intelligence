@@ -7,6 +7,8 @@ from app.jobs.service import claim_next_job
 from app.monitoring.classification import FakeMaterialityClassifier, FakeRelevanceClassifier
 from app.monitoring.ingestion import IngestionFailure, current_cursor, process_provider_result
 from app.monitoring.models import MonitoringConfig, MonitoringRun, MonitoringRunStatus, utcnow
+from app.monitoring.policy import monitoring_interval_minutes, retry_at
+from app.operations import log_event
 from app.monitoring.providers.base import ProviderFailure, QuestionContext
 
 ALLOWED_PROVIDERS = frozenset({'web', 'news', 'metaculus'})
@@ -24,15 +26,18 @@ def _finish(session_factory, *, job_id, run_id, config_id, total, attempted, suc
         config.last_run_at = now
         if error_code is None:
             run.status, job.status, job.finished_at = MonitoringRunStatus.SUCCEEDED.value, JobStatus.SUCCEEDED.value, now
-            config.last_success_at, config.next_run_at = now, now + timedelta(minutes=config.monitoring_interval_minutes)
+            resolve_at = session.scalar(select(QuestionSource.resolve_at).where(QuestionSource.question_id == config.question_id))
+            interval = monitoring_interval_minutes(resolve_at, explicit_interval_minutes=None if config.adaptive_schedule_enabled else config.monitoring_interval_minutes, now=now)
+            config.last_success_at, config.next_run_at = now, now + timedelta(minutes=interval)
         else:
             run.status, run.safe_error_summary = MonitoringRunStatus.FAILED.value, 'Monitoring provider or classification failed; retry is scheduled.'
             job.last_error_code, job.last_error_message = error_code, 'Monitoring provider or classification failed'
-            job.status, job.scheduled_for, job.finished_at = (JobStatus.RETRY_WAIT.value if job.attempt_count < job.max_attempts else JobStatus.FAILED.value), now + timedelta(minutes=1), now
+            job.status, job.scheduled_for, job.finished_at = (JobStatus.RETRY_WAIT.value if job.attempt_count < job.max_attempts else JobStatus.FAILED.value), retry_at(job.attempt_count, now=now), now
+        log_event('monitoring_run_finished', job_id=job_id, status=job.status, attempt_count=job.attempt_count, safe_error_code=error_code)
 
 def run_one_monitoring_job(session_factory, providers, relevance=None, materiality=None):
-    job = claim_next_job(session_factory)
-    if not job or job.job_type != 'monitor_question': return None
+    job = claim_next_job(session_factory, job_types=('monitor_question',))
+    if not job: return None
     with session_factory.begin() as session:
         claimed = session.get(BackgroundJob, job.id); config = session.get(MonitoringConfig, claimed.payload_json.get('config_id')); question = session.get(Question, claimed.question_id)
         if not config or not question or config.user_id != claimed.user_id or config.question_id != claimed.question_id or not config.enabled:

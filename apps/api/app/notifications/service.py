@@ -1,10 +1,11 @@
-from datetime import timedelta
 from fastapi import HTTPException
 from sqlalchemy import select
 from app.jobs.service import enqueue_job
 from app.monitoring.alerts import AlertEvent, Digest
 from app.notifications.models import NotificationAttempt, NotificationPreference, utcnow
 from app.notifications.providers import NotificationProviderFailure
+from app.monitoring.policy import retry_at
+from app.operations import log_event
 
 SAFE_CODES = frozenset({'provider_unavailable', 'authentication_failure', 'rate_limited', 'delivery_failure', 'malformed_provider_response', 'unknown_failure'})
 
@@ -55,9 +56,11 @@ def deliver_attempt(session_factory, attempt_id, providers):
         code = exc.code if exc.code in SAFE_CODES else 'delivery_failure'
         with session_factory.begin() as session:
             attempt = session.get(NotificationAttempt, attempt_id); attempt.status, attempt.last_error_code, attempt.last_error_message = 'retry_wait', code, 'Notification provider failed; retry is scheduled.'
-            attempt.completed_at, attempt.scheduled_for = utcnow(), utcnow() + timedelta(minutes=1)
+            attempt.completed_at, attempt.scheduled_for = utcnow(), retry_at(attempt.attempt_number)
+            log_event('notification_attempt_finished', attempt_id=attempt.id, provider=attempt.provider, status=attempt.status, safe_error_code=code)
         return attempt_id
     with session_factory.begin() as session:
         attempt = session.get(NotificationAttempt, attempt_id); attempt.status, attempt.completed_at, attempt.external_message_id = 'succeeded', utcnow(), result.external_message_id
         if attempt.digest_id: session.get(Digest, attempt.digest_id).delivered_at = utcnow()
+        log_event('notification_attempt_finished', attempt_id=attempt.id, provider=attempt.provider, status=attempt.status)
     return attempt_id

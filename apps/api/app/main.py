@@ -1,4 +1,6 @@
 import os
+from sqlalchemy import text
+from fastapi import HTTPException
 
 from app.competitions import models as competition_models
 from fastapi import FastAPI
@@ -45,6 +47,7 @@ def create_app(
     install_model_guards(engine)
     install_audit_guards(engine)
     install_journal_guards(engine)
+    monitoring_models.install_monitoring_schema_upgrades(engine)
     monitoring_models.install_monitoring_guards(engine)
 
     app = FastAPI(title="Metaculus Forecast Intelligence")
@@ -62,7 +65,7 @@ def create_app(
         CORSMiddleware,
         allow_origins=[os.getenv('WEB_ORIGIN', 'http://localhost:3000')],
         allow_credentials=True,
-        allow_methods=['GET', 'POST'],
+        allow_methods=['GET', 'POST', 'PUT'],
         allow_headers=['Content-Type'],
     )
     app.include_router(auth_router)
@@ -79,6 +82,17 @@ def create_app(
     @app.get("/health")
     def health():
         return {"status": "ok"}
+
+    @app.get("/ready")
+    def ready():
+        try:
+            if app.state.engine is None:
+                raise RuntimeError('engine unavailable')
+            with app.state.engine.connect() as connection:
+                connection.execute(text('SELECT 1'))
+        except Exception:
+            raise HTTPException(status_code=503, detail='Database is unavailable')
+        return {"status": "ready"}
 
     if seed_user:
         email = os.getenv("PRIVATE_USER_EMAIL")

@@ -3,7 +3,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class MonitoringEnable(BaseModel):
-    monitoring_interval_minutes: int = Field(default=360, ge=1, le=10080)
+    monitoring_interval_minutes: int | None = Field(default=None, ge=1, le=10080)
     materiality_threshold: float = Field(default=.75, ge=0, le=1)
     digest_threshold: float = Field(default=.30, ge=0, le=1)
 

@@ -10,6 +10,7 @@ test('completes the private forecasting core workflow', async ({page}) => {
   const competitionName = `Browser Cup ${Date.now()}`;
   await page.getByLabel('Competition name').fill(competitionName);
   await page.getByRole('button', {name: 'Create competition'}).click();
+  await page.reload();
   await expect(page.getByRole('heading', {name: competitionName, exact: true})).toBeVisible();
 
   const apiBase = 'http://127.0.0.1:8000';
@@ -25,6 +26,12 @@ test('completes the private forecasting core workflow', async ({page}) => {
   await page.goto(`/questions/${questionData.id}`);
 
   await expect(page.getByRole('heading', {name: 'Will the browser workflow complete?'})).toBeVisible();
+  await expect(page.getByRole('heading', {name: 'Monitoring'})).toBeVisible();
+  await expect(page.getByText('Monitoring is disabled')).toBeVisible();
+  await page.getByRole('button', {name: 'Enable monitoring'}).click();
+  await expect(page.getByText('Monitoring is enabled')).toBeVisible();
+  await page.getByRole('button', {name: 'Monitor now'}).click();
+  await expect(page.getByText('Monitoring is enabled')).toBeVisible();
   await page.getByLabel('Human probability (%)').fill('64');
   await page.getByLabel('Rationale (optional)').fill('Initial browser-tested estimate.');
   await page.getByRole('button', {name: 'Save human forecast'}).click();
@@ -69,4 +76,15 @@ test('completes the private forecasting core workflow', async ({page}) => {
   await expect(page.locator(`a[href="/questions/${questionData.id}"]`)).toHaveText(
     'Will the browser workflow complete?',
   );
+
+  await page.goto('/attention');
+  await expect(page.getByRole('heading', {name: 'Notifications'})).toBeVisible();
+  for (const label of ['Enable delivery', 'Deliver alerts', 'Deliver digests']) {
+    const control = page.getByLabel(label);
+    if (!await control.isChecked()) await control.click();
+    await expect(control).toBeChecked();
+  }
+  await expect(page.getByLabel('Enable delivery')).toBeChecked();
+  await expect(page.getByLabel('Deliver alerts')).toBeChecked();
+  await expect(page.getByLabel('Deliver digests')).toBeChecked();
 });

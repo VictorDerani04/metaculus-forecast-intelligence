@@ -28,6 +28,7 @@ from app.jobs import models as job_models
 from app.monitoring import models as monitoring_models
 from app.monitoring import alerts as alert_models
 from app.notifications import models as notification_models
+from app.monitoring.providers.live import build_live_provider_registry
 from app.db.base import Base
 from app.db.session import build_session_factory
 
@@ -54,6 +55,7 @@ def create_app(
     app.state.engine = engine
     app.state.session_factory = session_factory
     app.state.copilot_provider = UnavailableCopilotProvider()
+    app.state.monitoring_providers = build_live_provider_registry()
     app.add_middleware(
         SessionMiddleware,
         secret_key=session_secret,

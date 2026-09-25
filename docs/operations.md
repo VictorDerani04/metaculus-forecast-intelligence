@@ -29,6 +29,12 @@ cadence: >90 days 12h, 30–90 days 6h, 7–30 days 3h, and <=7 days hourly. An 
 interval remains user-owned. Worker leases expire after 15 minutes and use bounded
 1m/5m/15m/1h backoff; retries stop at `max_attempts`.
 
+Set `WEB_SEARCH_API_KEY` to enable the allowlisted Tavily web-search adapter. It
+uses the fixed HTTPS endpoint `https://api.tavily.com/search`, a 10-second default
+timeout (`WEB_SEARCH_TIMEOUT_SECONDS`), bounded results, and no redirects. Without
+the key, the live provider is absent; fake providers remain deterministic test-only
+dependencies. There is no arbitrary URL-fetch endpoint.
+
 ## Verification
 
 Run API tests with `py -m pytest` (or the project virtual environment), web tests

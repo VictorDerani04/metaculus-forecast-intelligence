@@ -59,7 +59,7 @@ def run_one_monitoring_job(session_factory, providers, relevance=None, materiali
         _add(total, exc.counts); failed += 1; _finish(session_factory, job_id=job_id, run_id=run_id, config_id=config_id, total=total, attempted=attempted, succeeded=succeeded, failed=failed, error_code=exc.code)
         return job_id
     except ProviderFailure as exc:
-        failed += 1; code = exc.code if exc.code in {'provider_failure', 'provider_unavailable', 'provider_timeout'} else 'provider_failure'
+        failed += 1; code = exc.code if exc.code in {'provider_failure', 'provider_unavailable', 'provider_timeout', 'rate_limited', 'provider_authentication_failure', 'malformed_provider_response'} else 'provider_failure'
         _finish(session_factory, job_id=job_id, run_id=run_id, config_id=config_id, total=total, attempted=attempted, succeeded=succeeded, failed=failed, error_code=code)
         return job_id
     except Exception:

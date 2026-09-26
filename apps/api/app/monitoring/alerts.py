@@ -5,7 +5,7 @@ from fastapi import HTTPException
 from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint, select
 from sqlalchemy.orm import Mapped, Session, mapped_column
 from app.db.base import Base
-from app.monitoring.models import Finding
+from app.monitoring.models import Finding, FindingEventLink
 
 def utcnow(): return datetime.now(timezone.utc)
 
@@ -27,6 +27,13 @@ class DigestItem(Base):
     eligible_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False); included_in_digest_id: Mapped[str | None] = mapped_column(ForeignKey('digests.id')); created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 def route_finding(session: Session, finding: Finding):
+    cluster_link = session.scalar(select(FindingEventLink).where(FindingEventLink.finding_id == finding.id, FindingEventLink.user_id == finding.user_id, FindingEventLink.question_id == finding.question_id))
+    if cluster_link:
+        prior_findings = select(FindingEventLink.finding_id).where(FindingEventLink.event_cluster_id == cluster_link.event_cluster_id, FindingEventLink.user_id == finding.user_id, FindingEventLink.finding_id != finding.id)
+        # The first routed material finding represents the event. Subsequent
+        # same-event copies add corroboration but never duplicate attention.
+        if session.scalar(select(AlertEvent.id).where(AlertEvent.user_id == finding.user_id, AlertEvent.finding_id.in_(prior_findings))):
+            return
     if finding.materiality_class in {'material', 'critical'}:
         if not session.scalar(select(AlertEvent.id).where(AlertEvent.user_id == finding.user_id, AlertEvent.finding_id == finding.id)):
             session.add(AlertEvent(user_id=finding.user_id, question_id=finding.question_id, finding_id=finding.id, severity=finding.materiality_class, reason=finding.materiality_reason))

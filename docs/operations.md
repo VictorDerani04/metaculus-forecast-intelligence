@@ -48,6 +48,30 @@ data contains bounded classifications, confidence, direction, timestamp, provide
 model, and schema version; it never contains keys, raw prompts, raw provider
 responses, or reasoning traces.
 
+## Source intelligence safety
+
+Findings receive a normalized source identity, bounded source type, and a
+conservative reliability label. These labels are not universal truth scores and
+do not use political ideology. Official sources are authoritative only for
+their own announcements and actions. Unknown or ambiguous identity stays
+`unknown`, never upgraded by a classifier.
+
+Event clustering is deterministic, user- and question-scoped, and requires
+high overlap in both headline and detail. Ambiguous reports remain separate.
+Clusters preserve every finding link and corroboration counts; recognized wire
+bylines share a reporting origin so syndicated copies do not add independent
+confirmation. Later same-event copies enrich corroboration without creating a
+duplicate alert or digest item.
+
+Security review: provider and AI text (names, headlines, snippets, and
+metadata) is bounded data, never an instruction. No content selects a prompt,
+model, URL, tool, or command. Live acquisition uses fixed HTTPS endpoints with
+no arbitrary URL fetch or redirects, so there is no direct SSRF surface. Keys
+remain environment-only, safe errors omit headers and bodies, raw HTML is not
+rendered, and no eval, exec, subprocess, dynamic import, or unsafe
+deserialization path handles provider content. Cluster reads and writes filter
+both `user_id` and `question_id`.
+
 ## Verification
 
 Run API tests with `py -m pytest` (or the project virtual environment), web tests

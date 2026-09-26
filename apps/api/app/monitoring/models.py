@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from enum import Enum
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, JSON, UniqueConstraint, inspect
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, ForeignKeyConstraint, Integer, String, Text, JSON, UniqueConstraint, inspect
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -90,7 +90,10 @@ class RawFinding(Base):
 
 class Finding(Base):
     __tablename__ = 'findings'
-    __table_args__ = (UniqueConstraint('user_id', 'question_id', 'content_fingerprint', name='uq_finding_fingerprint'),)
+    __table_args__ = (
+        UniqueConstraint('user_id', 'question_id', 'content_fingerprint', name='uq_finding_fingerprint'),
+        UniqueConstraint('id', 'user_id', 'question_id', name='uq_finding_owner_question_id'),
+    )
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), nullable=False, index=True)
     question_id: Mapped[str] = mapped_column(ForeignKey('questions.id'), nullable=False, index=True)
@@ -104,6 +107,11 @@ class Finding(Base):
     summary: Mapped[str] = mapped_column(Text, nullable=False)
     source_name: Mapped[str] = mapped_column(String(255), nullable=False)
     source_domain: Mapped[str | None] = mapped_column(String(255))
+    normalized_source: Mapped[str | None] = mapped_column(String(255), index=True)
+    source_type: Mapped[str] = mapped_column(String(30), default='unknown', nullable=False)
+    source_reliability: Mapped[str] = mapped_column(String(20), default='unknown', nullable=False)
+    source_reliability_reason: Mapped[str] = mapped_column(String(500), default='', nullable=False)
+    reporting_origin: Mapped[str | None] = mapped_column(String(255), index=True)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     discovered_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     content_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -121,6 +129,48 @@ class Finding(Base):
     classified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     classifier_schema_version: Mapped[str] = mapped_column(String(80), default='stage-3.2-v1', nullable=False)
     status: Mapped[str] = mapped_column(String(20), default='new', nullable=False)
+
+
+class EventCluster(Base):
+    __tablename__ = 'event_clusters'
+    __table_args__ = (UniqueConstraint('id', 'user_id', 'question_id', name='uq_event_cluster_owner_question_id'),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), nullable=False, index=True)
+    question_id: Mapped[str] = mapped_column(ForeignKey('questions.id'), nullable=False, index=True)
+    canonical_summary: Mapped[str] = mapped_column(String(500), nullable=False)
+    total_findings: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    unique_normalized_sources: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    independent_source_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    primary_source_present: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    wire_service_present: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    high_reliability_source_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class FindingEventLink(Base):
+    __tablename__ = 'finding_event_links'
+    __table_args__ = (
+        UniqueConstraint('finding_id', name='uq_finding_event_link'),
+        ForeignKeyConstraint(
+            ('finding_id', 'user_id', 'question_id'),
+            ('findings.id', 'findings.user_id', 'findings.question_id'),
+            name='fk_finding_event_link_finding_scope',
+        ),
+        ForeignKeyConstraint(
+            ('event_cluster_id', 'user_id', 'question_id'),
+            ('event_clusters.id', 'event_clusters.user_id', 'event_clusters.question_id'),
+            name='fk_finding_event_link_cluster_scope',
+        ),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(ForeignKey('users.id'), nullable=False, index=True)
+    question_id: Mapped[str] = mapped_column(ForeignKey('questions.id'), nullable=False, index=True)
+    finding_id: Mapped[str] = mapped_column(ForeignKey('findings.id'), nullable=False)
+    event_cluster_id: Mapped[str] = mapped_column(ForeignKey('event_clusters.id'), nullable=False, index=True)
+    match_score: Mapped[float] = mapped_column(Float, default=1, nullable=False)
+    match_reason: Mapped[str] = mapped_column(String(255), default='Initial cluster finding.', nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 
 def install_monitoring_guards(engine) -> None:
@@ -158,7 +208,34 @@ def install_monitoring_schema_upgrades(engine) -> None:
             "classifier_model": "VARCHAR(120) NOT NULL DEFAULT 'deterministic'",
             'classified_at': 'TIMESTAMP WITH TIME ZONE',
             "classifier_schema_version": "VARCHAR(80) NOT NULL DEFAULT 'stage-3.2-v1'",
+            'normalized_source': 'VARCHAR(255)',
+            "source_type": "VARCHAR(30) NOT NULL DEFAULT 'unknown'",
+            "source_reliability": "VARCHAR(20) NOT NULL DEFAULT 'unknown'",
+            "source_reliability_reason": "VARCHAR(500) NOT NULL DEFAULT ''",
+            'reporting_origin': 'VARCHAR(255)',
         }
         for column, definition in upgrades.items():
             if finding_columns and column not in finding_columns:
                 connection.exec_driver_sql(f'ALTER TABLE findings ADD COLUMN {column} {definition}')
+        if engine.dialect.name == 'postgresql':
+            connection.exec_driver_sql("""DO $$
+                BEGIN
+                    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_finding_owner_question_id') THEN
+                        ALTER TABLE findings ADD CONSTRAINT uq_finding_owner_question_id UNIQUE (id, user_id, question_id);
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_event_cluster_owner_question_id') THEN
+                        ALTER TABLE event_clusters ADD CONSTRAINT uq_event_cluster_owner_question_id UNIQUE (id, user_id, question_id);
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_finding_event_link_finding_scope') THEN
+                        ALTER TABLE finding_event_links
+                            ADD CONSTRAINT fk_finding_event_link_finding_scope
+                            FOREIGN KEY (finding_id, user_id, question_id)
+                            REFERENCES findings (id, user_id, question_id);
+                    END IF;
+                    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'fk_finding_event_link_cluster_scope') THEN
+                        ALTER TABLE finding_event_links
+                            ADD CONSTRAINT fk_finding_event_link_cluster_scope
+                            FOREIGN KEY (event_cluster_id, user_id, question_id)
+                            REFERENCES event_clusters (id, user_id, question_id);
+                    END IF;
+                END $$;""")

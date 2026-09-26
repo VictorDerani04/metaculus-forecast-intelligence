@@ -9,6 +9,7 @@ from app.monitoring.models import Finding, ProviderCursor, RawFinding
 from app.monitoring.normalization import canonicalize_url, fingerprint, normalize_text
 from app.research.models import ResearchItem
 from app.monitoring.alerts import route_finding
+from app.monitoring.source_intelligence_service import attach_to_event_cluster
 
 
 @dataclass
@@ -70,6 +71,7 @@ def ingest_item(session, *, user_id, question_id, run_id, provider, item, questi
                       materiality_reason=mat.reason, classifier_provider=rel.provider, classifier_model=rel.model,
                       classified_at=rel.classified_at, classifier_schema_version=rel.schema_version)
     session.add(finding); session.flush(); counts['normalized'] = 1
+    attach_to_event_cluster(session, finding)
     route_finding(session, finding); session.flush()
     if rel.relevance_class == 'relevant': counts['relevant'] = 1
     if mat.materiality_class in {'material', 'critical'}: counts['material'] = 1

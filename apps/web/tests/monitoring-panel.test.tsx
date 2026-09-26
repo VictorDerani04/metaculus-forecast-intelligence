@@ -57,3 +57,11 @@ it('shows bounded classification audit fields without raw prompts or provider re
   expect(screen.getByText('Classifier: openai / gpt-4o-mini')).toBeInTheDocument();
   expect(screen.getByText('Direct metric. Meaningful update.')).toBeInTheDocument();
 });
+
+it('shows bounded source intelligence audit fields', async () => {
+  vi.spyOn(globalThis, 'fetch')
+    .mockResolvedValueOnce(new Response(JSON.stringify({id:'m', enabled:true, monitoring_interval_minutes:60, last_run_at:null, last_success_at:null, next_run_at:null, latest_run:null})))
+    .mockResolvedValueOnce(new Response(JSON.stringify([{id:'f', title:'Official update', relevance_class:'relevant', relevance_confidence:0.9, relevance_reason:'Direct metric.', materiality_class:'material', materiality_confidence:0.8, materiality_direction:'down', materiality_reason:'Meaningful update.', classifier_provider:'openai', classifier_model:'gpt-4o-mini', normalized_source:'cdc.gov', source_type:'official', source_reliability:'high'}])));
+  render(<MonitoringPanel questionId="q" />);
+  expect(await screen.findByText('Source: cdc.gov · official · high')).toBeInTheDocument();
+});

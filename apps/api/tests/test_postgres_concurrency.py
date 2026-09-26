@@ -35,3 +35,21 @@ def test_postgresql_concurrent_claimers_claim_distinct_jobs():
         claimed = list(pool.map(lambda _: claim_next_job(session_factory, job_types=('runtime_probe',)), range(2)))
     assert all(claimed)
     assert len({job.id for job in claimed}) == 2
+
+
+def test_postgresql_event_cluster_schema_enforces_owner_and_question_scope():
+    from sqlalchemy import inspect
+    from app.main import create_app
+
+    app = create_app(
+        database_url=POSTGRES_URL,
+        session_secret='postgres-source-intelligence-test',
+        seed_user=False,
+    )
+    inspector = inspect(app.state.engine)
+    foreign_key_columns = {
+        tuple(sorted(foreign_key['constrained_columns']))
+        for foreign_key in inspector.get_foreign_keys('finding_event_links')
+    }
+    assert ('finding_id', 'question_id', 'user_id') in foreign_key_columns
+    assert ('event_cluster_id', 'question_id', 'user_id') in foreign_key_columns

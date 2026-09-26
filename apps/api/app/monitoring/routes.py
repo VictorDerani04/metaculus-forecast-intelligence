@@ -48,6 +48,7 @@ def monitoring_runs(question_id: str, request: Request, user: Annotated[User, De
 
 class FindingResponse(BaseModel):
     id: str; provider: str; source_url: str | None; canonical_url: str | None; title: str; summary: str; source_name: str; source_domain: str | None
+    normalized_source: str | None; source_type: str; source_reliability: str; source_reliability_reason: str; reporting_origin: str | None
     relevance_class: str; relevance_score: float; relevance_confidence: float; relevance_reason: str
     materiality_class: str; materiality_score: float; materiality_confidence: float; materiality_direction: str; materiality_reason: str
     classifier_provider: str; classifier_model: str; classified_at: datetime | None; classifier_schema_version: str; status: str

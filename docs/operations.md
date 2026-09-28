@@ -105,3 +105,47 @@ with `npm.cmd test`, typecheck with `npm.cmd run typecheck`, build with
 For the mandatory PostgreSQL proof, start Compose and run:
 
 `POSTGRES_TEST_DATABASE_URL=postgresql+psycopg://forecast:forecast@localhost:5432/forecast_intelligence py -m pytest apps/api/tests/test_postgres_concurrency.py -q`
+
+## PostgreSQL backup and recovery
+
+Use a PostgreSQL client with the same host, database, and role as the running
+application.  Do not place a password in a shell history; provide it through a
+local credential mechanism such as `PGPASSWORD` for the one command or a
+protected `.pgpass` file.
+
+Create a compressed, portable dump:
+
+`pg_dump --format=custom --no-owner --file forecast_intelligence.dump forecast_intelligence`
+
+Restore only into a deliberately created empty recovery database, never over
+the running application database:
+
+`createdb forecast_intelligence_recovery`
+
+`pg_restore --clean --if-exists --no-owner --dbname forecast_intelligence_recovery forecast_intelligence.dump`
+
+Verify the restored database with a read-only health query before any recovery
+decision.  Production backup schedules, retention, encryption, and off-host
+storage remain deployment responsibilities; this repository documents the
+safe local dump/restore procedure but does not operate a backup service.
+
+### Local Docker drill (executed 2026-09-28)
+
+The following commands were exercised against the local Compose container. They
+create and remove only `forecast_intelligence_restore_test`; the primary
+`forecast_intelligence` database is never reset or overwritten:
+
+`docker exec metaculus-forecast-intelligence-postgres-1 pg_dump -U forecast --format=custom --no-owner --file /tmp/stage35-forecast-intelligence.dump forecast_intelligence`
+
+`docker exec metaculus-forecast-intelligence-postgres-1 createdb -U forecast forecast_intelligence_restore_test`
+
+`docker exec metaculus-forecast-intelligence-postgres-1 pg_restore -U forecast --no-owner --dbname forecast_intelligence_restore_test /tmp/stage35-forecast-intelligence.dump`
+
+`docker exec metaculus-forecast-intelligence-postgres-1 psql -U forecast -d forecast_intelligence_restore_test -tAc "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';"`
+
+The restored schema contained 27 public tables. After verification, clean up
+only the temporary artifacts:
+
+`docker exec metaculus-forecast-intelligence-postgres-1 dropdb -U forecast forecast_intelligence_restore_test`
+
+`docker exec metaculus-forecast-intelligence-postgres-1 rm -f /tmp/stage35-forecast-intelligence.dump`

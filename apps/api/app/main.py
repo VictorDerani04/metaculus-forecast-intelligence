@@ -30,6 +30,7 @@ from app.monitoring import alerts as alert_models
 from app.notifications import models as notification_models
 from app.monitoring.providers.live import build_live_provider_registry
 from app.monitoring.classification import build_live_classifier
+from app.notifications.providers import build_notification_provider_registry
 from app.db.base import Base
 from app.db.session import build_session_factory
 
@@ -59,6 +60,7 @@ def create_app(
     app.state.monitoring_providers = build_live_provider_registry()
     # Missing credentials deliberately leave live classification unavailable; fakes are test dependencies only.
     app.state.monitoring_classifier = build_live_classifier()
+    app.state.notification_providers = build_notification_provider_registry()
     app.add_middleware(
         SessionMiddleware,
         secret_key=session_secret,

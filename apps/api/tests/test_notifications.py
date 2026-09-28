@@ -61,5 +61,36 @@ def test_disabled_preferences_prevent_delivery_and_safe_failures_retry(tmp_path)
     result = deliver_attempt(app.state.session_factory, attempt.id, {'fake': FakeNotificationProvider(error_code='authentication_failure', error_message='token=secret')})
     assert result == attempt.id
     row = client.get('/notification-attempts').json()[0]
-    assert row['status'] == 'retry_wait' and row['last_error_code'] == 'authentication_failure'
+    assert row['status'] == 'failed' and row['last_error_code'] == 'authentication_failure'
     assert 'secret' not in (row['last_error_message'] or '')
+
+
+def test_retryable_provider_failures_preserve_attention_and_use_bounded_retry(tmp_path):
+    from test_competitions import make_client
+    from app.notifications.providers import FakeNotificationProvider
+    from app.notifications.service import deliver_attempt
+    app, client = make_client(tmp_path); _, alert_id, digest_id = _seed_attention(app, client)
+    client.put('/notification-preferences', json={'enabled': True, 'immediate_alerts_enabled': True, 'digest_enabled': True})
+    alert_attempt = client.post(f'/alerts/{alert_id}/deliver').json()
+    digest_attempt = client.post(f'/digests/{digest_id}/deliver').json()
+    deliver_attempt(app.state.session_factory, alert_attempt['id'], {'fake': FakeNotificationProvider(error_code='timeout', error_message='api_key=secret')})
+    deliver_attempt(app.state.session_factory, digest_attempt['id'], {'fake': FakeNotificationProvider(error_code='rate_limited', error_message='api_key=secret')})
+    attempts = {row['id']: row for row in client.get('/notification-attempts').json()}
+    assert attempts[alert_attempt['id']]['status'] == 'retry_wait'
+    assert attempts[alert_attempt['id']]['last_error_code'] == 'timeout'
+    assert attempts[digest_attempt['id']]['status'] == 'retry_wait'
+    assert attempts[digest_attempt['id']]['last_error_code'] == 'rate_limited'
+    assert 'secret' not in str(attempts).lower()
+    assert client.get('/alerts').json()[0]['status'] == 'new'
+    assert client.get(f'/digests/{digest_id}').status_code == 200
+
+
+def test_missing_allowlisted_provider_becomes_safe_retryable_attempt_failure(tmp_path):
+    from test_competitions import make_client
+    from app.notifications.service import deliver_attempt
+    app, client = make_client(tmp_path); _, alert_id, _ = _seed_attention(app, client)
+    client.put('/notification-preferences', json={'enabled': True, 'immediate_alerts_enabled': True, 'digest_enabled': False})
+    attempt = client.post(f'/alerts/{alert_id}/deliver').json()
+    assert deliver_attempt(app.state.session_factory, attempt['id'], {}) == attempt['id']
+    row = client.get('/notification-attempts').json()[0]
+    assert (row['status'], row['last_error_code']) == ('retry_wait', 'provider_unavailable')

@@ -25,3 +25,8 @@ def run_one_notification_job(session_factory, providers):
         job.status, job.finished_at = (JobStatus.SUCCEEDED.value if attempt.status == 'succeeded' else JobStatus.RETRY_WAIT.value), utcnow()
         if job.status == JobStatus.RETRY_WAIT.value: job.scheduled_for = attempt.scheduled_for
     return job_id
+
+
+def run_one_configured_notification_job(app):
+    """Production entry point restricted to the application-owned registry."""
+    return run_one_notification_job(app.state.session_factory, app.state.notification_providers)

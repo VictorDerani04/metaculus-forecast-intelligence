@@ -72,6 +72,31 @@ rendered, and no eval, exec, subprocess, dynamic import, or unsafe
 deserialization path handles provider content. Cluster reads and writes filter
 both `user_id` and `question_id`.
 
+## Production notification email
+
+Real delivery is disabled unless `NOTIFICATION_PROVIDER=resend` and all of
+`NOTIFICATION_FROM_EMAIL`, `NOTIFICATION_TO_EMAIL`, and
+`NOTIFICATION_API_KEY` are configured server-side. The configured destination
+is private v1.0 configuration, never a request parameter or frontend value.
+The adapter uses the fixed Resend HTTPS endpoint, a 1–30 second timeout,
+escaped HTML plus text fallback, and the `NotificationAttempt` idempotency key.
+Missing or invalid configuration leaves the production registry empty and
+delivery fails safely. `fake` is a test dependency, not a production registry
+selection. Start the normal background worker with the configured application
+registry; it claims `deliver_notification` jobs and obeys the existing
+bounded 1/5/15/60-minute retry policy for timeout, rate-limit, transport, and
+5xx failures. Authentication, destination, and malformed provider response
+failures are recorded without credentials or provider response bodies.
+
+For a low-volume smoke test, configure a verified private destination, create
+one test alert or digest, run one notification worker job, and check that the
+attempt has an external message ID while the alert remains unacknowledged.
+Never put credentials in source, request bodies, or logs. Disable live delivery
+by unsetting `NOTIFICATION_PROVIDER`. Provider-level idempotency limits the
+crash-after-send window because success is persisted after the provider call;
+without an external provider guarantee, exactly-once delivery cannot be
+claimed.
+
 ## Verification
 
 Run API tests with `py -m pytest` (or the project virtual environment), web tests

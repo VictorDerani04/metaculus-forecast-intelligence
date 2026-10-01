@@ -33,7 +33,7 @@
 | Operations documentation | PASS | Local process, configuration, recovery, and exact Docker drill commands are documented. |
 | E2E | PASS | Playwright deterministic private-core acceptance workflow passed. |
 | Deterministic v1 acceptance scenario | PASS | Pipeline replay confirms candidate-only ResearchItem creation, source intelligence, clustering, suppression, and no autonomous crossing of human boundaries. |
-| Full backend regression | PASS | 264 passed, 2 skipped (the PostgreSQL-only tests are executed separately against the local service). |
+| Full backend regression | PASS | Release gate: 265 passed, 2 skipped (the PostgreSQL-only tests are executed separately against the local service). |
 | Frontend tests | PASS | 20 files / 53 tests passed. |
 | Frontend typecheck | PASS | `tsc --noEmit` passed. |
 | Frontend production build | PASS | `next build` passed. |
@@ -41,6 +41,7 @@
 | Live AI credential status | DEFERRED | NOT EXECUTED — CREDENTIALS NOT CONFIGURED. |
 | Live notification credential status | DEFERRED | NOT EXECUTED — CREDENTIALS NOT CONFIGURED. |
 | Live credential status | DEFERRED | No live research, AI, or notification credentials were available during this evaluation. |
+| Release-gate production startup | PASS | `APP_ENV=production` rejects SQLite/default session secret; PostgreSQL API `/health` and `/ready` returned 200. |
 
 ## Deterministic evaluation findings
 

@@ -7,6 +7,22 @@ Start PostgreSQL with `docker compose up -d postgres`, then set
 Start the API from `apps/api` with `py -m uvicorn app.main:app --reload`; start the
 web app from `apps/web` with `npm.cmd run dev`.
 
+## Production configuration and process startup
+
+Set `APP_ENV=production`, a PostgreSQL `DATABASE_URL`, a strong
+`SESSION_SECRET`, `COOKIE_SECURE=true`, private owner credentials, and the exact
+HTTPS `WEB_ORIGIN`. Production startup rejects SQLite and the default
+development session secret. There is no public signup. Keep all secrets in the
+deployment environment; `.env.example` contains names and safe example values
+only.
+
+Start the API with `py -m uvicorn app.main:app --host 0.0.0.0 --port 8000` and
+the frontend with `npm.cmd run start`. Run the scheduler loop, monitoring
+worker, and notification worker as separate long-lived processes that call the
+application-owned scheduler/worker entry points described below. They need no
+source edits or request-provided provider configuration; missing live-provider
+credentials leave the corresponding registry empty and jobs fail safely.
+
 The scheduler calls `enqueue_due_monitoring_jobs(session, now)` periodically. A
 worker calls `recover_stale_jobs(session_factory)` at startup and then invokes
 `run_one_configured_monitoring_job(app)` or `run_one_notification_job` with the

@@ -1,5 +1,6 @@
 import os
 from sqlalchemy import text
+from sqlalchemy.engine import make_url
 from fastapi import HTTPException
 
 from app.competitions import models as competition_models
@@ -35,6 +36,38 @@ from app.db.base import Base
 from app.db.session import build_session_factory
 
 
+MINIMUM_PRODUCTION_SESSION_SECRET_LENGTH = 32
+KNOWN_DEVELOPMENT_SESSION_SECRETS = frozenset({
+    "dev-only-change-me",
+    "replace-with-a-long-random-secret",
+    "REPLACE_WITH_A_UNIQUE_32_PLUS_CHARACTER_SECRET",
+    "test-session-secret",
+    "e2e-private-core-secret",
+})
+
+
+def production_environment() -> bool:
+    return os.getenv("APP_ENV", "development").lower() == "production"
+
+
+def validate_production_configuration(database_url: str, session_secret: str | None) -> None:
+    """Fail closed before opening a production database connection."""
+    if not production_environment():
+        return
+    try:
+        driver_name = make_url(database_url).drivername
+    except Exception as exc:
+        raise RuntimeError("PostgreSQL DATABASE_URL is required in production") from exc
+    if driver_name != "postgresql" and not driver_name.startswith("postgresql+"):
+        raise RuntimeError("PostgreSQL DATABASE_URL is required in production")
+    if (
+        not isinstance(session_secret, str)
+        or len(session_secret.strip()) < MINIMUM_PRODUCTION_SESSION_SECRET_LENGTH
+        or session_secret.strip() in KNOWN_DEVELOPMENT_SESSION_SECRETS
+    ):
+        raise RuntimeError("A strong SESSION_SECRET is required in production")
+
+
 def create_app(
     database_url: str | None = None,
     session_secret: str | None = None,
@@ -42,6 +75,7 @@ def create_app(
 ) -> FastAPI:
     database_url = database_url or os.getenv("DATABASE_URL", "sqlite:///./forecast_intelligence.db")
     session_secret = session_secret or os.getenv("SESSION_SECRET", "dev-only-change-me")
+    validate_production_configuration(database_url, session_secret)
     engine, session_factory = build_session_factory(database_url)
     Base.metadata.create_all(engine)
     install_history_guards(engine)
@@ -66,7 +100,7 @@ def create_app(
         secret_key=session_secret,
         session_cookie="session",
         same_site="lax",
-        https_only=os.getenv("COOKIE_SECURE", "false").lower() == "true",
+        https_only=production_environment() or os.getenv("COOKIE_SECURE", "false").lower() == "true",
     )
     app.add_middleware(
         CORSMiddleware,

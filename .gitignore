@@ -21,3 +21,19 @@ coverage/
 
 # Python package metadata
 *.egg-info/
+
+/release-gate-pytest-temp/
+
+# Local verification artifacts with Windows ACL restrictions
+/release-gate-pytest-temp/
+/.stage3-full/
+/.stage3-green/
+/.stage3-registry-red/
+/.task4-full-temp/
+/.task4-test-temp/
+
+/.stage3-full/
+/.stage3-green/
+/.stage3-registry-red/
+/.task4-full-temp/
+/.task4-test-temp/

@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+import pytest
 
 from app.main import create_app
 from app.auth.seed import seed_private_user
@@ -56,3 +57,63 @@ def test_me_requires_session(tmp_path):
 
     assert response.status_code == 401
     assert response.json() == {"detail": "Authentication required"}
+
+
+def test_production_startup_rejects_sqlite_and_default_session_secret(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("SESSION_SECRET", raising=False)
+
+    with pytest.raises(RuntimeError, match="PostgreSQL"):
+        create_app(seed_user=False)
+
+
+def test_production_rejects_sqlite_even_with_a_strong_secret(monkeypatch):
+    from app.main import validate_production_configuration
+
+    monkeypatch.setenv("APP_ENV", "production")
+    with pytest.raises(RuntimeError, match="PostgreSQL"):
+        validate_production_configuration("sqlite:///release.db", "x" * 32)
+
+
+def test_production_rejects_missing_session_secret(monkeypatch):
+    from app.main import validate_production_configuration
+
+    monkeypatch.setenv("APP_ENV", "production")
+    with pytest.raises(RuntimeError, match="SESSION_SECRET"):
+        validate_production_configuration("postgresql+psycopg://host/db", None)
+
+
+def test_production_rejects_blank_session_secret(monkeypatch):
+    from app.main import validate_production_configuration
+
+    monkeypatch.setenv("APP_ENV", "production")
+    with pytest.raises(RuntimeError, match="SESSION_SECRET"):
+        validate_production_configuration("postgresql://host/db", "   ")
+
+
+def test_production_rejects_default_session_secret(monkeypatch):
+    from app.main import validate_production_configuration
+
+    monkeypatch.setenv("APP_ENV", "production")
+    with pytest.raises(RuntimeError, match="SESSION_SECRET"):
+        validate_production_configuration("postgresql://host/db", "dev-only-change-me")
+
+
+def test_production_accepts_a_valid_postgresql_url_and_strong_secret(monkeypatch):
+    from app.main import validate_production_configuration
+
+    monkeypatch.setenv("APP_ENV", "production")
+    validate_production_configuration("postgresql+psycopg://host/db", "x" * 32)
+
+
+def test_production_cookie_is_always_secure(monkeypatch, tmp_path):
+    import app.main as main
+    from app.db.session import build_session_factory
+
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("COOKIE_SECURE", "false")
+    monkeypatch.setattr(main, "build_session_factory", lambda _: build_session_factory(f"sqlite:///{tmp_path / 'cookie.db'}"))
+    app = main.create_app(database_url="postgresql+psycopg://host/db", session_secret="x" * 32, seed_user=False)
+    session = next(middleware for middleware in app.user_middleware if middleware.cls.__name__ == "SessionMiddleware")
+    assert session.kwargs["https_only"] is True

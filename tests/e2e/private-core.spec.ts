@@ -7,6 +7,8 @@ test('completes the private forecasting core workflow', async ({page}) => {
   await page.getByRole('button', {name: 'Sign in'}).click();
 
   await expect(page).toHaveURL(/\/competitions$/);
+  await page.reload();
+  await expect(page.getByRole('heading', {name: 'Competitions'})).toBeVisible();
   const competitionName = `Browser Cup ${Date.now()}`;
   await page.getByLabel('Competition name').fill(competitionName);
   await page.getByRole('button', {name: 'Create competition'}).click();
@@ -87,4 +89,10 @@ test('completes the private forecasting core workflow', async ({page}) => {
   await expect(page.getByLabel('Enable delivery')).toBeChecked();
   await expect(page.getByLabel('Deliver alerts')).toBeChecked();
   await expect(page.getByLabel('Deliver digests')).toBeChecked();
+
+  await page.getByRole('button', {name: 'Sign out'}).click();
+  await expect(page).toHaveURL(/\/login$/);
+  expect(await page.evaluate(async () => (
+    await fetch('http://127.0.0.1:8000/auth/me', {credentials: 'include'})
+  ).status)).toBe(401);
 });

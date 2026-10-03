@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { SignOutButton } from "../../components/sign-out-button";
 import { QuestionList } from '../../components/question-list';
 import { ImportQuestion } from '../../components/import-question';
 
@@ -25,7 +26,6 @@ type CompetitionDashboardProps = {
   competitions: CompetitionSummary[];
   onImported?: (competitionId: string) => void;
 };
-
 
 export function CompetitionDashboard({
   competitions,
@@ -65,6 +65,7 @@ export default function CompetitionsPage() {
 
   return (
     <>
+    <SignOutButton />
     <form onSubmit={async event => {
       event.preventDefault();
       setError('');

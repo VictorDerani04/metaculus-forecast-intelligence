@@ -1,12 +1,13 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { login } from "../lib/api";
+import { AuthenticationError, login } from "../lib/api";
 import LoginPage from "../app/login/page";
 
 const replaceMock = vi.fn();
 
-vi.mock("../lib/api", () => ({
+vi.mock("../lib/api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../lib/api")>()),
   login: vi.fn(),
 }));
 
@@ -48,5 +49,17 @@ describe("login integration", () => {
     });
 
     expect(replaceMock).toHaveBeenCalledWith("/competitions");
+  });
+
+  it("shows the classified client error instead of navigating", async () => {
+    vi.mocked(login).mockRejectedValue(
+      new AuthenticationError("server_error", "Sign-in is temporarily unavailable. Please try again."),
+    );
+
+    render(<LoginPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Sign-in is temporarily unavailable. Please try again.");
+    expect(replaceMock).not.toHaveBeenCalled();
   });
 });

@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { LoginForm } from "../app/login/page";
+import { AuthenticationError } from "../lib/api";
 
 afterEach(() => {
   cleanup();
@@ -27,6 +28,43 @@ describe("login page", () => {
       email: "owner@example.com",
       password: "secret-password",
     });
+  });
+
+  it("shows a safe failure message and prevents a duplicate submission", async () => {
+    let resolveLogin: (() => void) | undefined;
+    const onLogin = vi.fn().mockImplementation(() => new Promise<void>((resolve) => {
+      resolveLogin = resolve;
+    }));
+
+    render(<LoginForm onLogin={onLogin} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+
+    expect(screen.getByRole("button", { name: "Signing in…" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Signing in…" }));
+    expect(onLogin).toHaveBeenCalledTimes(1);
+
+    resolveLogin?.();
+    await vi.waitFor(() => expect(screen.getByRole("button", { name: "Sign in" })).toBeEnabled());
+  });
+
+  it("renders a failed sign-in message", async () => {
+    render(<LoginForm onLogin={vi.fn().mockRejectedValue(
+      new AuthenticationError("invalid_credentials", "Invalid email or password."),
+    )} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Invalid email or password.");
+  });
+
+  it("does not display unexpected error details", async () => {
+    render(<LoginForm onLogin={vi.fn().mockRejectedValue(new Error("internal parser detail"))} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Unable to sign in. Please try again.");
+    expect(screen.queryByText("internal parser detail")).not.toBeInTheDocument();
   });
 });
 

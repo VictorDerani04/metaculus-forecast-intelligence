@@ -8,6 +8,22 @@ export type AuthenticatedUser = {
   email: string;
 };
 
+export type AuthenticationErrorKind =
+  | "invalid_credentials"
+  | "api_unavailable"
+  | "server_error"
+  | "unexpected";
+
+export class AuthenticationError extends Error {
+  constructor(
+    public readonly kind: AuthenticationErrorKind,
+    message: string,
+  ) {
+    super(message);
+    this.name = "AuthenticationError";
+  }
+}
+
 export type Competition = {
   id: string;
   name: string;
@@ -21,20 +37,51 @@ const API_BASE_URL =
 export async function login(
   credentials: LoginCredentials,
 ): Promise<AuthenticatedUser> {
-  const response = await fetch(`${API_BASE_URL}/auth/login`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    credentials: "include",
-    body: JSON.stringify(credentials),
-  });
-
-  if (!response.ok) {
-    throw new Error("Login failed");
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE_URL}/auth/login`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      credentials: "include",
+      body: JSON.stringify(credentials),
+    });
+  } catch (error) {
+    if (error instanceof TypeError) {
+      throw new AuthenticationError(
+        "api_unavailable",
+        "Unable to reach the sign-in service. Please try again.",
+      );
+    }
+    throw new AuthenticationError("unexpected", "Unable to sign in. Please try again.");
   }
 
-  return response.json() as Promise<AuthenticatedUser>;
+  if (response.status === 401) {
+    throw new AuthenticationError("invalid_credentials", "Invalid email or password.");
+  }
+  if (response.status >= 500) {
+    throw new AuthenticationError("server_error", "Sign-in is temporarily unavailable. Please try again.");
+  }
+  if (!response.ok) {
+    throw new AuthenticationError("unexpected", "Unable to sign in. Please try again.");
+  }
+
+  try {
+    return await response.json() as AuthenticatedUser;
+  } catch {
+    throw new AuthenticationError("unexpected", "Unable to sign in. Please try again.");
+  }
+}
+
+export async function logout(): Promise<void> {
+  const response = await fetch(`${API_BASE_URL}/auth/logout`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (!response.ok) {
+    throw new Error("Unable to sign out");
+  }
 }
 
 

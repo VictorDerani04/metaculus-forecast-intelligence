@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import {
+  AuthenticationError,
   login,
   type LoginCredentials,
 } from "../../lib/api";
@@ -15,14 +16,26 @@ type LoginFormProps = {
 export function LoginForm({ onLogin }: LoginFormProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (isSubmitting) return;
+    setError("");
+    setIsSubmitting(true);
 
-    void onLogin({
-      email,
-      password,
-    });
+    try {
+      await onLogin({email, password});
+    } catch (caught) {
+      setError(
+        caught instanceof AuthenticationError
+          ? caught.message
+          : "Unable to sign in. Please try again.",
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -48,7 +61,10 @@ export function LoginForm({ onLogin }: LoginFormProps) {
           />
         </label>
 
-        <button type="submit">Sign in</button>
+        {error && <p role="alert">{error}</p>}
+        <button type="submit" disabled={isSubmitting}>
+          {isSubmitting ? "Signing in…" : "Sign in"}
+        </button>
       </form>
     </main>
   );

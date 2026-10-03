@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 
@@ -50,6 +50,12 @@ def login(payload: LoginRequest, request: Request, session_factory=Depends(get_s
         request.session.clear()
         request.session["user_id"] = user.id
         return UserResponse(id=user.id, email=user.email)
+
+
+@router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
+def logout(request: Request) -> Response:
+    request.session.clear()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.get("/me", response_model=UserResponse)

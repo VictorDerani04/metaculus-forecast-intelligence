@@ -2,14 +2,54 @@
 
 ## Local processes
 
-Start PostgreSQL with `docker compose up -d postgres`, then set
-`DATABASE_URL=postgresql+psycopg://forecast:forecast@localhost:5432/forecast_intelligence`.
-Start the API from `apps/api` with `py -m uvicorn app.main:app --reload`; start the
-web app from `apps/web` with `npm.cmd run dev`.
+From the repository root, install the API and web dependencies, create your
+local configuration once, and start PostgreSQL:
+
+```powershell
+py -m pip install -e "apps/api[dev]"
+Set-Location apps/web
+npm.cmd install
+Set-Location ../..
+Copy-Item .env.example .env
+docker compose up -d postgres
+```
+
+Set unique development values for `SESSION_SECRET`, `PRIVATE_USER_EMAIL`, and
+`PRIVATE_USER_PASSWORD` in `.env`. The API loads this repository-root `.env`
+automatically; already-exported deployment/process environment values take precedence.
+Start each process in a separate terminal from the repository root:
+
+```powershell
+Set-Location apps/api
+py -m uvicorn app.main:app --reload
+```
+
+```powershell
+Set-Location apps/web
+npm.cmd run dev
+```
+
+The local frontend is `http://localhost:3000`, the API is
+`http://localhost:8000`, and the login page is `http://localhost:3000/login`.
+`NEXT_PUBLIC_API_BASE_URL` defaults to that API address for local development;
+set it in the frontend build/deployment environment when the API has another URL.
+
+`SYNC_PRIVATE_USER_PASSWORD=true` in `.env.example` is a development-only,
+explicit bootstrap setting. On API restart it reconciles the configured
+`PRIVATE_USER_EMAIL` account with `PRIVATE_USER_PASSWORD`; no database reset is
+needed after changing that password. Set it to `false` to retain the existing
+database password. Non-development environments reject this setting and never reset an existing
+user password. Changing the configured email creates that account if it does not
+already exist; it does not delete old local accounts.
+
+If login returns `401 Invalid email or password`, confirm the API was started
+from this repository, `.env` contains the intended private email/password, and
+restart the API with `SYNC_PRIVATE_USER_PASSWORD=true` in development. Check that
+`WEB_ORIGIN=http://localhost:3000` and `COOKIE_SECURE=false` for localhost.
 
 ## Production configuration and process startup
 
-Set `APP_ENV=production`, a PostgreSQL `DATABASE_URL`, a strong
+Set `APP_ENV=production`, `SYNC_PRIVATE_USER_PASSWORD=false`, a PostgreSQL `DATABASE_URL`, a strong
 `SESSION_SECRET`, `COOKIE_SECURE=true`, private owner credentials, and the exact
 HTTPS `WEB_ORIGIN`. Production startup rejects SQLite and the default
 development session secret. There is no public signup. Keep all secrets in the

@@ -1,4 +1,7 @@
 import os
+from pathlib import Path
+
+from dotenv import load_dotenv
 from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from fastapi import HTTPException
@@ -44,10 +47,37 @@ KNOWN_DEVELOPMENT_SESSION_SECRETS = frozenset({
     "test-session-secret",
     "e2e-private-core-secret",
 })
+ROOT_ENV_FILE = Path(__file__).resolve().parents[3] / ".env"
+
+
+def load_environment(env_file: Path = ROOT_ENV_FILE) -> None:
+    """Load local root configuration without replacing deployment variables."""
+    load_dotenv(env_file, override=False)
+
+
+load_environment()
 
 
 def production_environment() -> bool:
     return os.getenv("APP_ENV", "development").lower() == "production"
+
+
+def private_user_password_sync_enabled() -> bool:
+    enabled = os.getenv("SYNC_PRIVATE_USER_PASSWORD", "false").lower() == "true"
+    if enabled and os.getenv("APP_ENV", "development").lower() != "development":
+        raise RuntimeError("SYNC_PRIVATE_USER_PASSWORD is available only in development")
+    return enabled
+
+
+def session_max_age_seconds() -> int:
+    value = os.getenv("SESSION_MAX_AGE_SECONDS", "1209600")
+    try:
+        max_age = int(value)
+    except ValueError as exc:
+        raise RuntimeError("SESSION_MAX_AGE_SECONDS must be a positive integer") from exc
+    if max_age <= 0:
+        raise RuntimeError("SESSION_MAX_AGE_SECONDS must be a positive integer")
+    return max_age
 
 
 def validate_production_configuration(database_url: str, session_secret: str | None) -> None:
@@ -73,6 +103,7 @@ def create_app(
     session_secret: str | None = None,
     seed_user: bool = True,
 ) -> FastAPI:
+    synchronize_private_user_password = private_user_password_sync_enabled()
     database_url = database_url or os.getenv("DATABASE_URL", "sqlite:///./forecast_intelligence.db")
     session_secret = session_secret or os.getenv("SESSION_SECRET", "dev-only-change-me")
     validate_production_configuration(database_url, session_secret)
@@ -100,6 +131,7 @@ def create_app(
         secret_key=session_secret,
         session_cookie="session",
         same_site="lax",
+        max_age=session_max_age_seconds(),
         https_only=production_environment() or os.getenv("COOKIE_SECURE", "false").lower() == "true",
     )
     app.add_middleware(
@@ -139,7 +171,12 @@ def create_app(
         email = os.getenv("PRIVATE_USER_EMAIL")
         password = os.getenv("PRIVATE_USER_PASSWORD")
         if email and password:
-            seed_private_user(session_factory, email, password)
+            seed_private_user(
+                session_factory,
+                email,
+                password,
+                synchronize_password=synchronize_private_user_password,
+            )
 
     return app
 
